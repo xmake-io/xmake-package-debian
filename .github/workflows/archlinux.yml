@@ -1,0 +1,38 @@
+name: Archlinux
+
+on:
+  pull_request:
+  push:
+  release:
+    types: [published]
+
+jobs:
+  build:
+
+    container: archlinux:base-devel
+    runs-on: ubuntu-latest
+
+    concurrency:
+        group: ${{ github.head_ref }}-Archlinux
+        cancel-in-progress: true
+    steps:
+      - name: Prepare build tools
+        run: |
+          pacman -Sy --noconfirm --needed git base-devel perl make unzip
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: prepare local xmake
+        run: |
+          cp -rf . ../xmake-source
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: local#../xmake-source
+
+      - name: Tests
+        env:
+          XMAKE_ROOT: y
+        run: |
+          xmake lua -v -D tests/run.lua
+          xrepo --version
+

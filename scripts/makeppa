@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+
+# check
+if [ $# -lt 1 ]; then
+    echo "Usage: ./scripts/makeppa [serie] [patch]"
+    exit
+fi
+
+# workdir
+workdir=./xmake-ppa
+if [ ! -d $workdir ]; then
+    mkdir $workdir
+fi
+
+# version
+version=`cat ./core/xmake.lua | grep -E "^set_version" | grep -oE "[0-9]*\.[0-9]*\.[0-9]*"`
+
+# serie, e.g. groovy, focal, bionic, xenial, trusty, precise
+serie="$1"
+if [ -z $serie ]; then
+    serie=xenial
+fi
+
+# patch number
+patch="$2"
+if [ -z $patch ]; then
+    patch=1
+fi
+
+# tarball
+basename=xmake-$version+$patch$serie
+tarball=$workdir/$basename.tar.gz
+if [ ! -f $tarball ]; then
+    ./scripts/archive-all
+    cp ./artifacts/xmake.tar.gz $tarball
+fi
+
+# extract tarball
+cd $workdir
+if [ ! -d $basename ]; then
+    mkdir $basename 
+    tar -xvf $basename.tar.gz -C $basename 
+fi
+
+# enter project directory
+cd $basename
+
+# make template
+echo "making template .."
+if [ -d debian ]; then
+    rm -rf debian
+fi
+export USER=`id -u -n`
+dh_make -e waruqi@gmail.com -c apache -y -s -f ../$basename.tar.gz
+
+# copy debian
+echo "instaling debian .."
+if [ -d debian ]; then
+    rm -rf debian
+fi
+cp -r ../../scripts/debian .
+
+# update changelog
+rm debian/changelog
+dch -v $version+$patch$serie "update $version" -D $serie --create --package xmake -M $USER
+cat debian/changelog
+
+# build package
+echo "building package .."
+debuild -S -k02713554FA2CE4AADA20AB23167A22F22C0C68C9
+
+# check package
+echo "checking package .."
+lintian ../xmake_$version+$patch$serie.dsc
+
+# upload package
+echo "uploading package .."
+source=xmake_$version+"$patch$serie"_source
+if [ -f ../$source.ppa.upload ]; then 
+    rm ../$source.ppa.upload
+fi
+dput ppa:xmake-io/xmake ../$source.changes
+
+# remove workdir
+cd ../..
+rm -rf xmake-ppa
+
+# install dh-make and gpg
+# sudo apt install dh-make rng-tools
+#
+# @see https://help.ubuntu.com/community/GnuPrivacyGuardHowto
+#
+# generate key
+# gpg --gen-key
+#
+# save public/private key
+# gpg -a --export 2C0C68C9 > /mnt/xmake_ppa_pgp.pub
+# gpg -a --export-secret-keys 2C0C68C9 > /mnt/xmake_ppa_pgp.sec
+#
+# submit to keykserver and import this key to launchpad.net
+# @see https://launchpad.net/+help-registry/import-pgp-key.html
+# gpg --send-keys --keyserver keyserver.ubuntu.com 2C0C68C9
+#
+# recv email and validate this gpg key
+# gpg --decrypt file.txt
+# goto link
+#
+# show gpg
+# gpg --fingerprint
+# pub   2048R/2C0C68C9 2020-09-08
+#      Key fingerprint = 0271 3554 FA2C E4AA DA20  AB23 167A 22F2 2C0C 68C9
+#
+# build package and upload ppa to launchpad.net
+# https://launchpad.net/~xmake-io/+archive/ubuntu/xmake
+#
+# recv and import key on ubuntu
+# gpg --keyserver keyserver.ubuntu.com --recv 2C0C68C9
+# gpg --export --armor 2C0C68C9 | sudo apt-key add -
+#
+# show long key
+# gpg --keyid-format long --list-keys waruqi@gmail.com
+#

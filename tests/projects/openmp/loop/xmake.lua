@@ -1,0 +1,5 @@
+add_requires("openmp")
+target("loop")
+    set_kind("binary")
+    add_files("src/*.cpp")
+    add_packages("openmp")

@@ -1,0 +1,21 @@
+Source: xmake
+Section: contrib/devel
+Priority: optional
+Maintainer: ruki <waruqi@gmail.com>
+Build-Depends: debhelper (>=9)
+Standards-Version: 3.9.7
+Homepage: http://xmake.io
+#Vcs-Git: git@github.com:xmake-io/xmake.git
+#Vcs-Browser: https://github.com/xmake-io/xmake.git
+
+Package: xmake
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A cross-platform build utility based on Lua
+ xmake is a lightweight cross-platform build utility based on Lua. 
+ It uses xmake.lua to maintain project builds. Compared with makefile/CMakeLists.txt, 
+ the configuration syntax is more concise and intuitive. 
+ It is very friendly to novices and can quickly get started in a short time. 
+ Let users focus more on actual project development.
+
+ 
