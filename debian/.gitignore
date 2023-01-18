@@ -1,0 +1,27 @@
+!*
+
+# Ignore generated files
+*.deb
+*.dsc
+*.changes
+*.build
+*.buildinfo
+*.tar.gz
+
+# Ignore files generated during build
+files
+autoreconf.*
+*.substvars
+*.log
+*.debhelper
+*-stamp
+/*/
+
+!examples/
+!missing-sources/
+!patches/
+!po/
+!scripts/
+!source/
+!tests/
+!upstream/

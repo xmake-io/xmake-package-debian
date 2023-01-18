@@ -1,0 +1,44 @@
+Source: xmake
+Section: devel
+Priority: optional
+Maintainer: Ruki Wang <waruqi@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+Build-Depends-Arch:
+ pkg-config,
+ liblua5.4-dev,
+ liblz4-dev,
+ libsv-dev,
+ libtbox-dev,
+Rules-Requires-Root: no
+Standards-Version: 4.6.1
+Homepage: http://xmake.io
+Vcs-Git: https://salsa.debian.org/xmake-team/xmake.git
+Vcs-Browser: https://salsa.debian.org/xmake-team/xmake
+
+Package: xmake
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ xmake-data (>= ${source:Version}),
+Description: cross-platform build utility based on Lua
+ xmake is a lightweight cross-platform build utility based on Lua. It uses
+ xmake.lua to maintain project builds. Compared with makefile/CMakeLists.txt,
+ the configuration syntax is more concise and intuitive. It is very friendly to
+ novices and can quickly get started in a short time. Let users focus more on
+ actual project development.
+
+Package: xmake-data
+Architecture: all
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+Description: Data for xmake
+ xmake is a lightweight cross-platform build utility based on Lua. It uses
+ xmake.lua to maintain project builds. Compared with makefile/CMakeLists.txt,
+ the configuration syntax is more concise and intuitive. It is very friendly to
+ novices and can quickly get started in a short time. Let users focus more on
+ actual project development.
+ .
+ This package contains the static data for xmake.

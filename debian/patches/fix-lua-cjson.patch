@@ -1,0 +1,547 @@
+diff --git a/core/src/lua-cjson/xmake.sh b/core/src/lua-cjson/xmake.sh
+index 134173051..e3b9e68c5 100755
+--- a/core/src/lua-cjson/xmake.sh
++++ b/core/src/lua-cjson/xmake.sh
+@@ -4,12 +4,22 @@ target "lua_cjson"
+     set_kind "static"
+     set_default false
+     set_warnings "all"
+-    if is_config "runtime" "luajit" && has_config "luajit"; then
+-        add_options "luajit" "{public}"
+-    elif has_config "lua"; then
+-        add_options "lua" "{public}"
++    if has_config "external"; then
++        if is_config "runtime" "luajit"; then
++            if has_config "luajit"; then
++                add_options "luajit" "{public}"
++            fi
++        else
++            if has_config "lua"; then
++                add_options "lua" "{public}"
++            fi
++        fi
+     else
+-        add_deps "lua"
++        if is_config "runtime" "luajit"; then
++            add_deps "luajit"
++        else
++            add_deps "lua"
++        fi
+     fi
+     add_files "lua-cjson/dtoa.c"
+     add_files "lua-cjson/lua_cjson.c"
+@@ -17,4 +27,6 @@ target "lua_cjson"
+     add_files "lua-cjson/g_fmt.c"
+     # Use internal strtod() / g_fmt() code for performance and disable multi-thread
+     add_defines "NDEBUG" "USE_INTERNAL_FPCONV"
++    add_defines "XM_CONFIG_API_HAVE_LUA_CJSON" "{public}"
++
+ 
+diff --git a/core/src/luajit/xmake.sh b/core/src/luajit/xmake.sh
+index 459da8999..0a0b0002c 100755
+--- a/core/src/luajit/xmake.sh
++++ b/core/src/luajit/xmake.sh
+@@ -30,7 +30,7 @@ else
+ fi
+ jit_autogendir="luajit/autogen/${jit_plat}/${jit_dir}/${jit_arch}"
+ 
+-target "lua"
++target "luajit"
+     set_kind "static"
+     set_default false
+     set_warnings "all"
+diff --git a/core/src/xmake/engine.c b/core/src/xmake/engine.c
+index 0ecafd064..a0a019c33 100644
+--- a/core/src/xmake/engine.c
++++ b/core/src/xmake/engine.c
+@@ -1109,9 +1109,11 @@ xm_engine_ref_t xm_engine_init(tb_char_t const* name, xm_engine_lni_initalizer_c
+         xm_lua_curses_register(engine->lua, "curses");
+ #endif
+ 
++#ifdef XM_CONFIG_API_HAVE_LUA_CJSON
+         // bind cjson
+         luaopen_cjson(engine->lua);
+         lua_setglobal(engine->lua, "cjson");
++#endif
+ 
+         // init host
+         xm_engine_init_host(engine);
+diff --git a/core/src/xmake/xmake.sh b/core/src/xmake/xmake.sh
+index f3fe92aa1..dc45ecbca 100755
+--- a/core/src/xmake/xmake.sh
++++ b/core/src/xmake/xmake.sh
+@@ -5,20 +5,32 @@ target "xmake"
+     set_default false
+ 
+     # add deps
+-    local libs="lua_cjson lz4 sv tbox"
+-    for lib in $libs; do
+-        if has_config "$lib"; then
+-            add_options "$lib" "{public}"
++    if has_config "external"; then
++        local libs="lz4 sv tbox"
++        for lib in $libs; do
++            if has_config "$lib"; then
++                add_options "$lib" "{public}"
++            fi
++        done
++        if is_config "runtime" "luajit"; then
++            if has_config "luajit"; then
++                add_options "luajit" "{public}"
++            fi
+         else
+-            add_deps "$lib"
++            if has_config "lua"; then
++                add_options "lua" "{public}"
++            fi
+         fi
+-    done
+-    if is_config "runtime" "luajit" && has_config "luajit"; then
+-        add_options "luajit" "{public}"
+-    elif has_config "lua"; then
+-        add_options "lua" "{public}"
+     else
+-        add_deps "lua"
++        local libs="lua_cjson lz4 sv tbox"
++        for lib in $libs; do
++            add_deps "$lib"
++        done
++        if is_config "runtime" "luajit"; then
++            add_deps "luajit"
++        else
++            add_deps "lua"
++        fi
+     fi
+ 
+     # add options
+diff --git a/core/xmake.sh b/core/xmake.sh
+index 5de724427..3b8a785a6 100755
+--- a/core/xmake.sh
++++ b/core/xmake.sh
+@@ -1,7 +1,7 @@
+ #!/bin/sh
+ 
+ set_project "xmake"
+-set_version "2.7.5" "%Y%m%d%H%M"
++set_version "2.7.5" "%Y%m%d"
+ 
+ # set warning all
+ set_warnings "all"
+@@ -35,6 +35,9 @@ fi
+ # the runtime option, lua or luajit
+ option "runtime" "Use luajit or lua runtime" "lua"
+ 
++# always use external dependencies
++option "external" "Always use external dependencies" false
++
+ # the readline option
+ option "readline"
+     add_links "readline"
+@@ -75,17 +78,6 @@ void test() {\n
+ }"
+ option_end
+ 
+-# the lua-cjson option
+-option "lua_cjson"
+-    add_links "lua5.1-cjson"
+-    add_csnippets "
+-int luaopen_cjson(void *l);\n
+-void test() {\n
+-    luaopen_cjson(0);\n
+-}
+-"
+-option_end
+-
+ # the lua option
+ option "lua"
+     add_cfuncs "lua_pushstring"
+@@ -95,9 +87,19 @@ option "lua"
+ option_end
+ 
+ option_find_lua() {
++    local ldflags=""
++    local cflags=""
+     option "lua"
+-        add_cflags `pkg-config --cflags lua5.4 2>/dev/null`
+-        add_ldflags `pkg-config --libs lua5.4 2>/dev/null`
++        cflags=`pkg-config --cflags lua5.4 2>/dev/null`
++        ldflags=`pkg-config --libs lua5.4 2>/dev/null`
++        if test_z "${cflags}"; then
++            cflags="-I/usr/include/lua5.4"
++        fi
++        if test_z "${ldflags}"; then
++            ldflags="-llua5.4"
++        fi
++        add_cflags "${cflags}"
++        add_ldflags "${ldflags}"
+     option_end
+ }
+ 
+@@ -110,9 +112,19 @@ option "luajit"
+ option_end
+ 
+ option_find_luajit() {
++    local ldflags=""
++    local cflags=""
+     option "luajit"
+-        add_cflags `pkg-config --cflags luajit 2>/dev/null`
+-        add_ldflags `pkg-config --libs luajit 2>/dev/null`
++        cflags=`pkg-config --cflags luajit 2>/dev/null`
++        ldflags=`pkg-config --libs luajit 2>/dev/null`
++        if test_z "${cflags}"; then
++            cflags="-I/usr/include/luajit-2.1"
++        fi
++        if test_z "${ldflags}"; then
++            ldflags="-lluajit"
++        fi
++        add_cflags "${cflags}"
++        add_ldflags "${ldflags}"
+     option_end
+ }
+ 
+@@ -124,9 +136,19 @@ option "lz4"
+ option_end
+ 
+ option_find_lz4() {
++    local ldflags=""
++    local cflags=""
+     option "lz4"
+-        add_cflags `pkg-config --cflags liblz4 2>/dev/null`
+-        add_ldflags `pkg-config --libs liblz4 2>/dev/null`
++        cflags=`pkg-config --cflags liblz4 2>/dev/null`
++        ldflags=`pkg-config --libs liblz4 2>/dev/null`
++        if test_z "${cflags}"; then
++            cflags="-I/usr/include"
++        fi
++        if test_z "${ldflags}"; then
++            ldflags="-llz4"
++        fi
++        add_cflags "${cflags}"
++        add_ldflags "${ldflags}"
+     option_end
+ }
+ 
+@@ -139,15 +161,19 @@ option "sv"
+ option_end
+ 
+ option_find_sv() {
++    local ldflags=""
++    local cflags=""
+     option "sv"
+-        local dirs="/usr/local /usr"
+-        for dir in $dirs; do
+-            if test -f "${dir}/lib/libsv.a"; then
+-                add_linkdirs "${dir}/lib"
+-                add_includedirs "${dir}/include/sv"
+-                break
+-            fi
+-        done
++        cflags=`pkg-config --cflags libsv 2>/dev/null`
++        ldflags=`pkg-config --libs libsv 2>/dev/null`
++        if test_z "${cflags}"; then
++            cflags="-I/usr/include"
++        fi
++        if test_z "${ldflags}"; then
++            ldflags="-lsv"
++        fi
++        add_cflags "${cflags}"
++        add_ldflags "${ldflags}"
+     option_end
+ }
+ 
+@@ -160,38 +186,33 @@ option "tbox"
+ option_end
+ 
+ option_find_tbox() {
++    local ldflags=""
++    local cflags=""
+     option "tbox"
+-        local dirs="/usr/local /usr"
+-        for dir in $dirs; do
+-            if test -f "${dir}/lib/libtbox.a"; then
+-                add_linkdirs "${dir}/lib"
+-                add_includedirs "${dir}/include"
+-                break
+-            fi
+-        done
++        cflags=`pkg-config --cflags libtbox 2>/dev/null`
++        ldflags=`pkg-config --libs libtbox 2>/dev/null`
++        if test_z "${cflags}"; then
++            cflags="-I/usr/include"
++        fi
++        if test_z "${ldflags}"; then
++            ldflags="-ltbox"
++        fi
++        add_cflags "${cflags}"
++        add_ldflags "${ldflags}"
+     option_end
+ }
+ 
+ # add projects
+-if ! has_config "lua"; then
++if ! has_config "external"; then
+     if is_config "runtime" "luajit"; then
+         includes "src/luajit"
+     else
+         includes "src/lua"
+     fi
+-fi
+-if ! has_config "lua_cjson"; then
+     includes "src/lua-cjson"
+-fi
+-if ! has_config "lz4"; then
+     includes "src/lz4"
+-fi
+-if ! has_config "sv"; then
+     includes "src/sv"
+-fi
+-if ! has_config "tbox"; then
+     includes "src/tbox"
+ fi
+ includes "src/xmake"
+ includes "src/demo"
+-
+diff --git a/xmake/core/base/json.lua b/xmake/core/base/json.lua
+index e83f6b320..4c619e69a 100644
+--- a/xmake/core/base/json.lua
++++ b/xmake/core/base/json.lua
+@@ -20,14 +20,219 @@
+ 
+ -- define module: json
+ local json  = json or {}
+-local cjson = cjson or {}
+ 
+ -- load modules
+ local io    = require("base/io")
++local os    = require("base/os")
+ local utils = require("base/utils")
+ 
+ -- export null
+-json.null = cjson.null
++if cjson then
++    json.null = cjson.null
++else
++    json.null = {}
++    setmetatable(json.null, {
++        __is_json_null = true,
++        __eq = function (obj)
++            if type(obj) == "table" then
++                local mt = getmetatable(obj)
++                if mt and mt.__is_json_null then
++                    return true
++                end
++            end
++            return false
++        end,
++        __tostring = function()
++            return "null"
++        end})
++end
++
++function json._pure_kind_of(obj)
++    if type(obj) ~= "table" then
++        return type(obj)
++    end
++    if json.is_marked_as_array(obj) then
++        return "array"
++    end
++    if obj == json.null then
++        return "nil"
++    end
++    local i = 1
++    for _ in pairs(obj) do
++        if obj[i] ~= nil then
++            i = i + 1
++        else
++            return "table"
++        end
++    end
++    if i == 1 then
++        return "table"
++    else
++        return "array"
++    end
++end
++
++function json._pure_escape_str(s)
++    local in_char  = {'\\', '"', '/', '\b', '\f', '\n', '\r', '\t'}
++    local out_char = {'\\', '"', '/',  'b',  'f',  'n',  'r',  't'}
++    for i, c in ipairs(in_char) do
++        s = s:gsub(c, '\\' .. out_char[i])
++    end
++    return s
++end
++
++function json._pure_skip_delim(str, pos, delim, err_if_missing)
++    pos = pos + #str:match('^%s*', pos)
++    if str:sub(pos, pos) ~= delim then
++        if err_if_missing then
++            os.raise("expected %s near position %d", delim, pos)
++        end
++        return pos, false
++    end
++    return pos + 1, true
++end
++
++function json._pure_parse_str_val(str, pos, val)
++    val = val or ''
++    local early_end_error = "end of input found while parsing string."
++    if pos > #str then
++        os.raise(early_end_error)
++    end
++    local c = str:sub(pos, pos)
++    if c == '"'  then
++        return val, pos + 1
++    end
++    if c ~= '\\' then
++        return json._pure_parse_str_val(str, pos + 1, val .. c)
++    end
++
++    -- we must have a \ character.
++    local esc_map = {b = '\b', f = '\f', n = '\n', r = '\r', t = '\t'}
++    local nextc = str:sub(pos + 1, pos + 1)
++    if not nextc then
++        os.raise(early_end_error)
++    end
++    return json._pure_parse_str_val(str, pos + 2, val .. (esc_map[nextc] or nextc))
++end
++
++function json._pure_parse_num_val(str, pos)
++    local num_str = str:match('^-?%d+%.?%d*[eE]?[+-]?%d*', pos)
++    local val = tonumber(num_str)
++    if not val then
++        os.raise("error parsing number at position %d", pos)
++    end
++    return val, pos + #num_str
++end
++
++function json._pure_stringify(obj, as_key)
++    local s = {}
++    local kind = json._pure_kind_of(obj)
++    if kind == "array" then
++        if as_key then
++            os.raise("can\'t encode array as key.")
++        end
++        s[#s + 1] = '['
++        for i, val in ipairs(obj) do
++            if i > 1 then s[#s + 1] = ',' end
++            s[#s + 1] = json._pure_stringify(val)
++        end
++        s[#s + 1] = ']'
++    elseif kind == "table" then
++        if as_key then
++            os.raise("can\'t encode table as key.")
++        end
++        s[#s + 1] = '{'
++        for k, v in pairs(obj) do
++            if #s > 1 then s[#s + 1] = ',' end
++            s[#s + 1] = json._pure_stringify(k, true)
++            s[#s + 1] = ':'
++            s[#s + 1] = json._pure_stringify(v)
++        end
++        s[#s + 1] = '}'
++    elseif kind == "string" then
++        return '"' .. json._pure_escape_str(obj) .. '"'
++    elseif kind == "number" then
++        if as_key then
++            return '"' .. tostring(obj) .. '"'
++        end
++        return tostring(obj)
++    elseif kind == "boolean" then
++        return tostring(obj)
++    elseif kind == "nil" then
++        return "null"
++    else
++        os.raise("unknown type: %s", kind)
++    end
++    return table.concat(s)
++end
++
++function json._pure_parse(str, pos, end_delim)
++    pos = pos or 1
++    if pos > #str then
++        os.raise("reached unexpected end of input.")
++    end
++    -- skip whitespace.
++    local pos = pos + #str:match('^%s*', pos)
++    local first = str:sub(pos, pos)
++    if first == '{' then
++        local obj, key, delim_found = {}, true, true
++        pos = pos + 1
++        while true do
++            key, pos = json._pure_parse(str, pos, '}')
++            if key == nil then
++                return obj, pos
++            end
++            if not delim_found then
++                os.raise("comma missing between object items.")
++            end
++            pos = json._pure_skip_delim(str, pos, ':', true)  -- true -> error if missing.
++            obj[key], pos = json._pure_parse(str, pos)
++            pos, delim_found = json._pure_skip_delim(str, pos, ',')
++        end
++    elseif first == '[' then
++        local arr, val, delim_found = {}, true, true
++        json.mark_as_array(arr)
++        pos = pos + 1
++        while true do
++            val, pos = json._pure_parse(str, pos, ']')
++            if val == nil then
++                return arr, pos
++            end
++            if not delim_found then
++                os.raise("comma missing between array items.")
++            end
++            arr[#arr + 1] = val
++            pos, delim_found = json._pure_skip_delim(str, pos, ',')
++        end
++    elseif first == '"' then
++        return json._pure_parse_str_val(str, pos + 1)
++    elseif first == '-' or first:match("%d") then
++        return json._pure_parse_num_val(str, pos)
++    elseif first == end_delim then
++        -- end of an object or array.
++        return nil, pos + 1
++    else
++        local literals = {["true"] = true, ["false"] = false, ["null"] = json.null}
++        for lit_str, lit_val in pairs(literals) do
++            local lit_end = pos + #lit_str - 1
++            if str:sub(pos, lit_end) == lit_str then
++                return lit_val, lit_end + 1
++            end
++        end
++        local pos_info_str = "position " .. pos .. ": " .. str:sub(pos, pos + 10)
++        os.raise("invalid json syntax starting at " .. pos_info_str)
++    end
++end
++
++-- decode json string using pure lua
++function json._pure_decode(jsonstr, opt)
++    return json._pure_parse(jsonstr)
++end
++
++-- encode json string using pua lua
++function json._pure_encode(luatable, opt)
++    return json._pure_stringify(luatable)
++end
+ 
+ -- support empty array
+ -- @see https://github.com/mpx/lua-cjson/issues/11
+@@ -51,7 +256,7 @@ end
+ -- @return              the lua table
+ --
+ function json.decode(jsonstr, opt)
+-    local ok, luatable_or_errors = utils.trycall(cjson.decode, nil, jsonstr)
++    local ok, luatable_or_errors = utils.trycall(cjson and cjson.decode or json._pure_decode, nil, jsonstr)
+     if not ok then
+         return nil, string.format("decode json failed, %s", luatable_or_errors)
+     end
+@@ -66,7 +271,7 @@ end
+ -- @return              the json string
+ --
+ function json.encode(luatable, opt)
+-    local ok, jsonstr_or_errors = utils.trycall(cjson.encode, nil, luatable)
++    local ok, jsonstr_or_errors = utils.trycall(cjson and cjson.encode or json._pure_encode, nil, luatable)
+     if not ok then
+         return nil, string.format("encode json failed, %s", jsonstr_or_errors)
+     end

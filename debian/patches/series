@@ -1,0 +1,3 @@
+fix-configure.patch
+fix-syserror.patch
+fix-lua-cjson.patch
