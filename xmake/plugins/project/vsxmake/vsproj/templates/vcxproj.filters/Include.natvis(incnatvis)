@@ -1,0 +1,3 @@
+    <Natvis Include="#path#">
+      <Filter>#dir#</Filter>
+    </Natvis>
