@@ -2,6 +2,29 @@
 
 ## master (unreleased)
 
+## v2.7.6
+
+### New features
+
+* [#3228](https://github.com/xmake-io/xmake/pull/3228): Add support of importing modules from packages
+* [#3257](https://github.com/xmake-io/xmake/issues/3257): Add support for iverilog and verilator
+* Support for xp and vc6.0
+* [#3214](https://github.com/xmake-io/xmake/pull/3214): Completion on xrepo install packages
+
+### Changes
+
+* [#3255](https://github.com/xmake-io/xmake/pull/3225): Improve clang libc++ module support
+* Support for compiling xmake using mingw
+* Improve compatibility issues with xmake running on win xp
+* Add pure lua json implementation instead of lua-cjson if the external dependencies are enabled
+
+### Bugs fixed
+
+* [#3229](https://github.com/xmake-io/xmake/issues/3229): Fix find rc.exe for vs2015
+* [#3271](https://github.com/xmake-io/xmake/issues/3271): Fix macro defines with spaces
+* [#3273](https://github.com/xmake-io/xmake/issues/3273): Fix nim link error
+* [#3286](https://github.com/xmake-io/xmake/issues/3286): Fix compile_commands for clangd
+
 ## v2.7.5
 
 ### New features
@@ -1486,6 +1509,29 @@
 # 更新日志
 
 ## master (开发中)
+
+## v2.7.6
+
+### 新特性
+
+* [#3228](https://github.com/xmake-io/xmake/pull/3228): C++ modules 的安装发布，以及从包中导入 C++ modules 支持
+* [#3257](https://github.com/xmake-io/xmake/issues/3257): 增加对 iverilog 和 verilator 的支持
+* 支持 xp 和 vc6.0
+* [#3214](https://github.com/xmake-io/xmake/pull/3214): xrepo install 的自动补全支持
+
+### 改进
+
+* [#3255](https://github.com/xmake-io/xmake/pull/3225): 改进 clang libc++ 模块支持
+* 支持使用 mingw 编译 xmake
+* 改进 xmake 在 win xp 上的兼容性
+* 如果外部依赖被启用，切换 json 模块到纯 lua 实现，移除对 lua-cjson 的依赖
+
+### Bugs 修复
+
+* [#3229](https://github.com/xmake-io/xmake/issues/3229): 修复 vs2015 下找不到 rc.exe 问题
+* [#3271](https://github.com/xmake-io/xmake/issues/3271): 修复支持带有空格的宏定义
+* [#3273](https://github.com/xmake-io/xmake/issues/3273): 修复 nim 链接错误
+* [#3286](https://github.com/xmake-io/xmake/issues/3286): 修复 compile_commands 对 clangd 的支持
 
 ## v2.7.5
 

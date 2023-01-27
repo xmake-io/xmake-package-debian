@@ -475,12 +475,13 @@ end
 -- - library(default)
 --
 function _instance:kind()
-    local kind = self:get("kind")
+    local kind
+    local requireinfo = self:requireinfo()
+    if requireinfo then
+        kind = requireinfo.kind
+    end
     if not kind then
-        local requireinfo = self:requireinfo()
-        if requireinfo then
-            kind = requireinfo.kind
-        end
+        kind = self:get("kind")
     end
     return kind
 end
@@ -933,7 +934,7 @@ function _instance:envs()
                 if path.is_absolute(value) then
                     table.insert(newvalues, value)
                 else
-                    table.insert(newvalues, path.join(self:installdir(), value))
+                    table.insert(newvalues, path.normalize(path.join(self:installdir(), value)))
                 end
             end
             values = newvalues

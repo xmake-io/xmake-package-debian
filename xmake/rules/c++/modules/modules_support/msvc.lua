@@ -20,11 +20,11 @@
 
 -- imports
 import("core.base.option")
+import("core.base.json")
 import("core.tool.compiler")
 import("core.project.project")
 import("core.project.depend")
 import("core.project.config")
-import("core.base.hashset")
 import("core.base.semver")
 import("utils.progress")
 import("private.action.build.object", {alias = "objectbuilder"})
@@ -63,17 +63,18 @@ function _get_modulemap_from_mapper(target)
 end
 
 -- do compile
-function _compile(target, flags)
+function _compile(target, flags, sourcefile)
     local compinst = target:compiler("cxx")
     local msvc = target:toolchain("msvc")
-    os.vrunv(compinst:program(), winos.cmdargv(table.join(compinst:compflags({target = target}), flags)), {envs = msvc:runenvs()})
+    local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
+    os.vrunv(compinst:program(), winos.cmdargv(table.join(compflags or {}, flags)), {envs = msvc:runenvs()})
 end
 
 -- do compile for batchcmds
 -- @note we need use batchcmds:compilev to translate paths in compflags for generator, e.g. -Ixx
-function _batchcmds_compile(batchcmds, target, flags)
+function _batchcmds_compile(batchcmds, target, flags, sourcefile)
     local compinst = target:compiler("cxx")
-    local compflags = compinst:compflags({target = target})
+    local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
     batchcmds:compilev(table.join(compflags or {}, flags), {compiler = compinst, sourcekind = "cxx"})
 end
 
@@ -98,7 +99,7 @@ function _build_modulefile(target, sourcefile, opt)
     local objectfile = opt.objectfile
     local dependfile = opt.dependfile
     local compinst = compiler.load("cxx", {target = target})
-    local compflags = compinst:compflags({target = target})
+    local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
     local dependinfo = option.get("rebuild") and {} or (depend.load(dependfile) or {})
 
     -- need build this object?
@@ -180,8 +181,8 @@ end
 function generate_dependencies(target, sourcebatch, opt)
     local msvc = target:toolchain("msvc")
     local scandependenciesflag = get_scandependenciesflag(target)
+    local ifcoutputflag = get_ifcoutputflag(target)
     local common_flags = {"-TP", scandependenciesflag}
-    local cachedir = common.modules_cachedir(target)
     local changed = false
     for _, sourcefile in ipairs(sourcebatch.sourcefiles) do
         local dependfile = target:dependfile(sourcefile)
@@ -189,43 +190,19 @@ function generate_dependencies(target, sourcebatch, opt)
             if opt.progress then
                 progress.show(opt.progress, "${color.build.object}generating.module.deps %s", sourcefile)
             end
-            local outputdir = path.join(cachedir, path.directory(path.relative(sourcefile, projectdir)))
-            if not os.isdir(outputdir) then
-                os.mkdir(outputdir)
-            end
+            local outputdir = common.get_outputdir(target, sourcefile)
 
-            local jsonfile = path.join(outputdir, path.filename(sourcefile) .. ".json")
-            if scandependenciesflag then
-                local flags = {jsonfile, sourcefile, "-Fo" .. target:objectfile(sourcefile)}
-                _compile(target, table.join(common_flags, flags))
+            local jsonfile = path.join(outputdir, path.filename(sourcefile) .. ".module.json")
+            if scandependenciesflag and not target:policy("build.c++.msvc.fallbackscanner") then
+                local flags = {jsonfile, sourcefile, ifcoutputflag, outputdir, "-Fo" .. target:objectfile(sourcefile)}
+                _compile(target, table.join(common_flags, flags), sourcefile)
             else
                 common.fallback_generate_dependencies(target, jsonfile, sourcefile, function(file)
                     local compinst = target:compiler("cxx")
-                    local defines = {}
-                    for _, define in ipairs(target:get("defines")) do
-                        table.insert(defines, "/D" .. define)
-                    end
-                    local _includedirs = table.join({}, target:get("includedirs"))
-                    for _, dep in ipairs(target:orderdeps()) do
-                        local includedir = dep:get("sysincludedirs") or dep:get("includedirs")
-                        if includedir then
-                            table.join2(_includedirs, includedir)
-                        end
-                    end
-                    for _, pkg in pairs(target:pkgs()) do
-                        local includedir = pkg:get("sysincludedirs") or pkg:get("includedirs")
-                        if includedir then
-                            table.join2(_includedirs, includedir)
-                        end
-                    end
-                    local includedirs = {}
-                    for _, includedir in pairs(_includedirs) do
-                        table.insert(includedirs, "/I")
-                        table.insert(includedirs, includedir)
-                    end
+                    local compflags = compinst:compflags({sourcefile = file, target = target})
                     local ifile = path.translate(path.join(outputdir, path.filename(file) .. ".i"))
-                    os.vrunv(compinst:program(), table.join(includedirs, defines,
-                        {"/nologo", get_cppversionflag(target), "/P", "-TP", file,  "/Fi" .. ifile}), {envs = msvc:runenvs()})
+                    os.vrunv(compinst:program(), table.join(compflags,
+                        {"/P", "-TP", file,  "/Fi" .. ifile}), {envs = msvc:runenvs()})
                     local content = io.readfile(ifile)
                     os.rm(ifile)
                     return content
@@ -330,8 +307,6 @@ end
 
 -- generate target user header units for batchcmds
 function generate_user_headerunits_for_batchjobs(target, batchjobs, headerunits, opt)
-    local cachedir = common.modules_cachedir(target)
-
     -- get flags
     local exportheaderflag = get_exportheaderflag(target)
     local headerunitflag = get_headerunitflag(target)
@@ -345,17 +320,10 @@ function generate_user_headerunits_for_batchjobs(target, batchjobs, headerunits,
     end, {rootjob = opt.rootjob})
 
     -- build headerunits
-    local projectdir = os.projectdir()
     for _, headerunit in ipairs(headerunits) do
         local file = path.relative(headerunit.path, target:scriptdir())
         local objectfile = target:objectfile(file)
-        local outputdir
-        if headerunit.type == ":quote" then
-            outputdir = path.join(cachedir, path.directory(path.relative(headerunit.path, projectdir)))
-        else
-            -- if path is relative then its a subtarget path
-            outputdir = path.join(cachedir, path.is_absolute(headerunit.path) and path.directory(headerunit.path):sub(3) or headerunit.path)
-        end
+        local outputdir = common.get_outputdir(target, headerunit)
         local bmifilename = path.basename(objectfile) .. get_bmi_extension()
         local bmifile = path.join(outputdir, bmifilename)
         batchjobs:addjob(headerunit.name, function (index, total)
@@ -387,7 +355,6 @@ end
 
 -- generate target user header units for batchcmds
 function generate_user_headerunits_for_batchcmds(target, batchcmds, headerunits, opt)
-    local cachedir = common.modules_cachedir(target)
     local exportheaderflag = get_exportheaderflag(target)
     local headerunitflag = get_headerunitflag(target)
     local headernameflag = get_headernameflag(target)
@@ -395,18 +362,11 @@ function generate_user_headerunits_for_batchcmds(target, batchcmds, headerunits,
     assert(headerunitflag and headernameflag and exportheaderflag, "compiler(msvc): does not support c++ header units!")
 
     -- build headerunits
-    local projectdir = os.projectdir()
     local depmtime = 0
     for _, headerunit in ipairs(headerunits) do
         local file = path.relative(headerunit.path, target:scriptdir())
         local objectfile = target:objectfile(file)
-        local outputdir
-        if headerunit.type == ":quote" then
-            outputdir = path.join(cachedir, path.directory(path.relative(headerunit.path, projectdir)))
-        else
-            -- if path is relative then its a subtarget path
-            outputdir = path.join(cachedir, path.is_absolute(headerunit.path) and path.directory(headerunit.path):sub(3) or headerunit.path)
-        end
+        local outputdir = common.get_outputdir(target, headerunit)
         batchcmds:mkdir(outputdir)
 
         local bmifilename = path.basename(objectfile) .. get_bmi_extension()
@@ -450,6 +410,7 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
         for objectfile, module in pairs(get_stdmodules(target)) do
             table.insert(objectfiles, objectfile)
             modules[objectfile] = module
+            modules[objectfile].external = true
         end
     end
 
@@ -480,6 +441,21 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
             if provide then
                 table.join2(flags, {ifcoutputflag, path(provide.bmi), provide.interface and interfaceflag or internalpartitionflag})
                 dependfile = target:dependfile(provide.bmi)
+
+                local fileconfig = target:fileconfig(cppfile)
+                if fileconfig and fileconfig.install then
+                    batchjobs:addjob(name .. "_metafile", function(index, total)
+                        local outputdir = common.get_outputdir(target, cppfile)
+                        local metafilepath = path.join(outputdir, path.filename(cppfile) .. ".meta-info")
+                        depend.on_changed(function()
+                            progress.show((index * 100) / total, "${color.build.object}generating.module.metadata %s", name)
+                            local metadata = common.generate_meta_module_info(target, name, cppfile, module.requires)
+                            json.savefile(metafilepath, metadata)
+
+                        end, {dependfile = target:dependfile(metafilepath), files = {cppfile}})
+
+                    end, {rootjob = flushjob})
+                end
             end
 
             table.join2(moduleinfo, {
@@ -497,17 +473,17 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
 
                     if provide or common.has_module_extension(cppfile) then
                         if not common.memcache():get2(name or cppfile, "compiling") then
-                            if name and name:match("std") then
-                            common.memcache():set2(name or cppfile, "compiling", true)
+                            if name and module.external then
+                                common.memcache():set2(name or cppfile, "compiling", true)
                             end
-                        _build_modulefile(target, cppfile, {
-                            objectfile = objectfile,
-                            dependfile = dependfile,
-                            name = name or module.cppfile,
-                            flags = _flags,
-                            progress = (index * 100) / total})
-                        _add_objectfile_to_link_arguments(target, path(objectfile))
+                            _build_modulefile(target, cppfile, {
+                                objectfile = objectfile,
+                                dependfile = dependfile,
+                                name = name or module.cppfile,
+                                flags = _flags,
+                                progress = (index * 100) / total})
                         end
+                        _add_objectfile_to_link_arguments(target, objectfile)
                     elseif requiresflags then
                         requiresflags = get_requiresflags(target, module.requires)
                         target:fileconfig_add(cppfile, {force = {cxxflags = table.join(flags, requiresflags)}})
@@ -575,9 +551,9 @@ function build_modules_for_batchcmds(target, batchcmds, objectfiles, modules, op
 
                 batchcmds:show_progress(opt.progress, "${color.build.object}compiling.module.$(mode) %s", name or cppfile)
                 batchcmds:mkdir(path.directory(objectfile))
-                _batchcmds_compile(batchcmds, target, table.join(flags, requiresflags or {}))
+                _batchcmds_compile(batchcmds, target, table.join(flags, requiresflags or {}), cppfile)
                 batchcmds:add_depfiles(cppfile)
-                _add_objectfile_to_link_arguments(target, path(objectfile))
+                _add_objectfile_to_link_arguments(target, path.translate(objectfile))
                 if provide then
                     _add_module_to_mapper(target, referenceflag, name, name, objectfile, provide.bmi, requiresflags)
                 end
@@ -642,10 +618,10 @@ function get_ifcoutputflag(target)
     local ifcoutputflag = _g.ifcoutputflag
     if ifcoutputflag == nil then
         local compinst = target:compiler("cxx")
-        if compinst:has_flags("-ifcOutput", "cxxflags", {flagskey = "cl_ifc_output"})  then
+        if compinst:has_flags({"-ifcOutput", os.tmpfile()}, "cxxflags", {flagskey = "cl_ifc_output"})  then
             ifcoutputflag = "-ifcOutput"
         end
-        assert(ifcoutputflag, "compiler(msvc): does not support c++ module!")
+        assert(ifcoutputflag, "compiler(msvc): does not support c++ module flag(/ifcOutput)!")
         _g.ifcoutputflag = ifcoutputflag or false
     end
     return ifcoutputflag or nil
@@ -655,10 +631,10 @@ function get_ifcsearchdirflag(target)
     local ifcsearchdirflag = _g.ifcsearchdirflag
     if ifcsearchdirflag == nil then
         local compinst = target:compiler("cxx")
-        if compinst:has_flags("-ifcSearchDir", "cxxflags", {flagskey = "cl_ifc_search_dir"})  then
+        if compinst:has_flags({"-ifcSearchDir", os.tmpdir()}, "cxxflags", {flagskey = "cl_ifc_search_dir"})  then
             ifcsearchdirflag = "-ifcSearchDir"
         end
-        assert(ifcsearchdirflag, "compiler(msvc): does not support c++ module!")
+        assert(ifcsearchdirflag, "compiler(msvc): does not support c++ module flag(/ifcSearchDir)!")
         _g.ifcsearchdirflag = ifcsearchdirflag or false
     end
     return ifcsearchdirflag or nil
@@ -671,7 +647,7 @@ function get_interfaceflag(target)
         if compinst:has_flags("-interface", "cxxflags", {flagskey = "cl_interface"}) then
             interfaceflag = "-interface"
         end
-        assert(interfaceflag, "compiler(msvc): does not support c++ module!")
+        assert(interfaceflag, "compiler(msvc): does not support c++ module flag(/interface)!")
         _g.interfaceflag = interfaceflag or false
     end
     return interfaceflag
@@ -681,10 +657,10 @@ function get_referenceflag(target)
     local referenceflag = _g.referenceflag
     if referenceflag == nil then
         local compinst = target:compiler("cxx")
-        if compinst:has_flags("-reference", "cxxflags", {flagskey = "cl_reference"}) then
+        if compinst:has_flags({"-reference", "Foo=" .. os.tmpfile()}, "cxxflags", {flagskey = "cl_reference"}) then
             referenceflag = "-reference"
         end
-        assert(referenceflag, "compiler(msvc): does not support c++ module!")
+        assert(referenceflag, "compiler(msvc): does not support c++ module flag(/reference)!")
         _g.referenceflag = referenceflag or false
     end
     return referenceflag or nil
@@ -694,8 +670,8 @@ function get_headernameflag(target)
     local headernameflag = _g.headernameflag
     if headernameflag == nil then
         local compinst = target:compiler("cxx")
-        if compinst:has_flags("-headerName:quote", "cxxflags", {flagskey = "cl_header_name_quote"}) and
-        compinst:has_flags("-headerName:angle", "cxxflags", {flagskey = "cl_header_name_angle"}) then
+        if compinst:has_flags({"-std:c++latest", "-exportHeader", "-headerName:quote"}, "cxxflags", {flagskey = "cl_header_name_quote"}) and
+        compinst:has_flags({"-std:c++latest", "-exportHeader", "-headerName:angle"}, "cxxflags", {flagskey = "cl_header_name_angle"}) then
             headernameflag = "-headerName"
         end
         _g.headernameflag = headernameflag or false
@@ -707,8 +683,9 @@ function get_headerunitflag(target)
     local headerunitflag = _g.headerunitflag
     if headerunitflag == nil then
         local compinst = target:compiler("cxx")
-        if compinst:has_flags("-headerUnit:quote", "cxxflags", {flagskey = "cl_header_unit_quote"}) and
-        compinst:has_flags("-headerUnit:angle", "cxxflags", {flagskey = "cl_header_unit_angle"}) then
+        local ifcfile = os.tmpfile()
+        if compinst:has_flags({"-std:c++latest", "-headerUnit:quote", "foo.h=" .. ifcfile}, "cxxflags", {flagskey = "cl_header_unit_quote"}) and
+        compinst:has_flags({"-std:c++latest", "-headerUnit:angle", "foo.h=" .. ifcfile}, "cxxflags", {flagskey = "cl_header_unit_angle"}) then
             headerunitflag = "-headerUnit"
         end
         _g.headerunitflag = headerunitflag or false
@@ -717,11 +694,9 @@ function get_headerunitflag(target)
 end
 
 function get_exportheaderflag(target)
-    local modulesflag = get_modulesflag(target)
     local exportheaderflag = _g.exportheaderflag
     if exportheaderflag == nil then
-        local compinst = target:compiler("cxx")
-        if compinst:has_flags(modulesflag .. " -exportHeader", "cxxflags", {flagskey = "cl_export_header"}) then
+        if get_headernameflag(target) then
             exportheaderflag = "-exportHeader"
         end
         _g.exportheaderflag = exportheaderflag or false

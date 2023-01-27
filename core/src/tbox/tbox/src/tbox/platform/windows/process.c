@@ -28,6 +28,11 @@
 #include "../process.h"
 #include "../environment.h"
 #include "../../string/string.h"
+#ifdef TB_COMPILER_IS_MINGW
+// enable UpdateProcThreadAttribute
+#   undef _WIN32_WINNT
+#   define _WIN32_WINNT 0x0600
+#endif
 #include "interface/interface.h"
 #if defined(TB_CONFIG_MODULE_HAVE_COROUTINE) \
         && !defined(TB_CONFIG_MICRO_ENABLE)
@@ -451,7 +456,7 @@ tb_process_ref_t tb_process_init_cmd(tb_char_t const* cmd, tb_process_attr_ref_t
                 if (lpAttributeList && tb_kernel32()->InitializeProcThreadAttributeList(lpAttributeList, 1, 0, &attributeListSize))
                 {
                     lpAttributeListInited = tb_true;
-                    if (UpdateProcThreadAttribute(lpAttributeList, 0,
+                    if (tb_kernel32()->UpdateProcThreadAttribute(lpAttributeList, 0,
                             PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
                             handlesToInherit,
                             handlesToInheritCount * sizeof(HANDLE), tb_null, tb_null))

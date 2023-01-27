@@ -20,6 +20,7 @@
 
 -- imports
 import("core.base.json")
+import("core.base.bytes")
 import("core.base.hashset")
 import("core.project.config")
 import("core.tool.compiler")
@@ -43,7 +44,7 @@ end
 -- get stl modules cache directory
 function stlmodules_cachedir(target, opt)
     opt = opt or {}
-    local stlcachedir = path.join(config.buildir(), "stlmodules", "cache")
+    local stlcachedir = path.join(config.buildir(), "stlmodules", "cache", config.mode() or "release")
     if opt.mkdir and not os.isdir(stlcachedir) then
         os.mkdir(stlcachedir)
         os.mkdir(path.join(stlcachedir, "experimental"))
@@ -100,6 +101,86 @@ function patch_sourcebatch(target, sourcebatch)
         table.insert(sourcebatch.objectfiles, objectfile)
         table.insert(sourcebatch.dependfiles, dependfile)
     end
+end
+
+function parse_meta_info(target, metafile)
+    local metadata = json.loadfile(metafile)
+    if metadata._VENDOR_extension.xmake then
+        return metadata._VENDOR_extension.xmake.file, metadata._VENDOR_extension.xmake.name, metadata
+    end
+
+    local filename = path.basename(metafile)
+    local metadir = path.directory(metafile)
+    for _, ext in ipairs({".mpp", ".mxx", ".cppm", ".ixx"}) do
+        if os.isfile(path.join(metadir, filename .. ext)) then
+            filename = filename .. ext
+            break
+        end
+    end
+
+    local sourcecode = io.readfile(path.join(path.directory(metafile), filename))
+    sourcecode = sourcecode:gsub("//.-\n", "\n")
+    sourcecode = sourcecode:gsub("/%*.-%*/", "")
+
+    local name
+    for _, line in ipairs(sourcecode:split("\n", {plain = true})) do
+        name = line:match("export%s+module%s+(.+)%s*;") or line:match("export%s+__preprocessed_module%s+(.+)%s*;")
+        if name then
+            break
+        end
+    end
+
+    return filename, name, metadata
+end
+
+-- extract packages modules dependencies
+function get_all_package_modules(target, modules, opt)
+    local package_modules
+
+    -- parse all meta-info and append their informations to the package store
+    for name, package in pairs(target:pkgs()) do
+        package_modules = package_modules or {}
+        local modules_dir = path.join(package:installdir(), "modules", name)
+        local metafiles = os.files(path.join(modules_dir, "**.meta-info"))
+        for _, metafile in ipairs(metafiles) do
+            local modulefile, name, metadata = parse_meta_info(target, metafile)
+            package_modules[name] = {
+                file = path.join(modules_dir, modulefile),
+                metadata = metadata
+            }
+        end
+    end
+
+    return package_modules
+end
+
+-- cull unused modules
+function cull_unused_modules(target, modules, package_modules_data)
+    local needed_modules = {}
+    -- append all target dependencies
+    for _, module in pairs(modules) do
+        if module.requires then
+            for required, _ in pairs(module.requires) do
+                table.insert(needed_modules, required)
+            end
+        end
+    end
+
+    -- append all package dependencies
+    local culled
+    local module_names = table.keys(package_modules_data)
+    for _, name in ipairs(module_names) do
+        culled = culled or {}
+        if table.find(needed_modules, name) and package_modules_data[name] and not culled[name] then
+            culled[name] = package_modules_data[name]
+
+            if culled[name].metadata.imports then
+                 table.join2(needed_modules, culled[name].metadata.imports)
+                 table.join2(module_names, culled[name].metadata.imports)
+            end
+        end
+    end
+    return culled
 end
 
 -- get modules support
@@ -207,7 +288,6 @@ end
 }]]
 function _parse_dependencies_data(target, moduleinfos)
     local modules
-    local cachedir = modules_cachedir(target)
     for _, moduleinfo in ipairs(moduleinfos) do
         assert(moduleinfo.version <= 1)
         for _, rule in ipairs(moduleinfo.rules) do
@@ -217,24 +297,30 @@ function _parse_dependencies_data(target, moduleinfos)
                 for _, provide in ipairs(rule.provides) do
                     m.provides = m.provides or {}
                     assert(provide["logical-name"])
-                    if provide["compiled-module-path"] then
-                        if not path.is_absolute(provide["compiled-module-path"]) then
-                            m.provides[provide["logical-name"]] = path.absolute(path.translate(provide["compiled-module-path"]))
-                        else
-                            m.provides[provide["logical-name"]] = path.translate(provide["compiled-module-path"])
+                    local bmifile = provide["compiled-module-path"]
+                    -- try to find the compiled module path in outputs filed (MSVC doesn't generate compiled-module-path)
+                    if not bmifile then
+                        for _, output in ipairs(rule.outputs) do
+                            if output:endswith(".ifc") or output:endswith(".pcm") or output:endswith(".bmi") then
+                                bmifile = output
+                                break
+                            end
                         end
-                    else
-                        -- assume path with name
-                        local name = provide["logical-name"] .. bmi_extension(target)
-                        -- partition ":" character is invalid path character on windows
-                        -- @see https://github.com/xmake-io/xmake/issues/2954
-                        name = name:replace(":", "-")
-                        m.provides[provide["logical-name"]] = {
-                            bmi = path.join(cachedir, name),
-                            sourcefile = moduleinfo.sourcefile,
-                            interface = provide["is-interface"]
-                        }
+
+                        -- we didn't found the compiled module path, so we assume it
+                        if not bmifile then
+                            local name = provide["logical-name"] .. bmi_extension(target)
+                            -- partition ":" character is invalid path character on windows
+                            -- @see https://github.com/xmake-io/xmake/issues/2954
+                            name = name:replace(":", "-")
+                            bmifile = path.join(get_outputdir(target,  name), name)
+                        end
                     end
+                    m.provides[provide["logical-name"]] = {
+                        bmi = bmifile,
+                        sourcefile = moduleinfo.sourcefile,
+                        interface = provide["is-interface"]
+                    }
                 end
             else
                 m.cppfile = moduleinfo.sourcefile
@@ -436,7 +522,7 @@ end
   ]
 }]]
 function fallback_generate_dependencies(target, jsonfile, sourcefile, preprocess_file)
-    local output = {version = 0, revision = 0, rules = {}}
+    local output = {version = 1, revision = 0, rules = {}}
     local rule = {outputs = {jsonfile}}
     rule["primary-output"] = target:objectfile(sourcefile)
 
@@ -470,6 +556,7 @@ function fallback_generate_dependencies(target, jsonfile, sourcefile, preprocess
             if module_depname:startswith(":") then
                 local module_name = (module_name_export or module_name_private or "")
                 module_name = module_name:split(":")[1]
+                module_dep["unique-on-source-path"] = true
                 module_depname = module_name .. module_depname
             elseif module_depname:startswith("\"") then
                 module_depname = module_depname:sub(2, -2)
@@ -489,12 +576,13 @@ function fallback_generate_dependencies(target, jsonfile, sourcefile, preprocess
     end
 
     if module_name_export or internal then
-        table.insert(rule.outputs, (module_name_export or module_name_private) .. bmi_extension(target))
+        local outputdir = get_outputdir(target, sourcefile)
 
         local provide = {}
         provide["logical-name"] = module_name_export or module_name_private
-        provide["source-path"] = path.absolute(sourcefile, project.directory())
+        provide["source-path"] = sourcefile
         provide["is-interface"] = not internal
+        provide["compiled-module-path"] = path.join(outputdir, (module_name_export or module_name_private) .. bmi_extension(target))
 
         rule.provides = {}
         table.insert(rule.provides, provide)
@@ -510,7 +598,7 @@ end
 function get_module_dependencies(target, sourcebatch, opt)
     local cachekey = target:name() .. "/" .. sourcebatch.rulename
     local modules = memcache():get2("modules", cachekey)
-    if modules == nil then
+    if modules == nil or opt.regenerate then
         modules = localcache():get2("modules", cachekey)
         opt.progress = opt.progress or 0
         local changed = modules_support(target).generate_dependencies(target, sourcebatch, opt)
@@ -564,11 +652,92 @@ function append_dependency_objectfiles(target)
     local cache = localcache():get(cachekey)
     if cache then
         if target:is_binary() then
-            target:add("ldflags", cache, {force = true})
+            target:add("ldflags", cache, {force = true, expand = false})
         elseif target:is_static() then
-            target:add("arflags", cache, {force = true})
+            target:add("arflags", cache, {force = true, expand = false})
         elseif target:is_shared() then
-            target:add("shflags", cache, {force = true})
+            target:add("shflags", cache, {force = true, expand = false})
         end
+    end
+end
+
+-- generate meta module informations for package / other buildsystems import
+-- based on https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2021/p2473r1.pdf
+--
+-- e.g
+-- {
+--      "include_paths": ["foo/", "bar/"]
+--      "definitions": ["FOO=BAR"]
+--      "imports": ["std", "bar"]
+--      "_VENDOR_extension": {}
+-- }
+function generate_meta_module_info(target, name, sourcefile, requires)
+    local module_metadata = {}
+
+    -- add include paths
+    module_metadata.include_paths = table.wrap(target:get("includedirs")) or {}
+    for _, deps in ipairs(target:orderdeps()) do
+        table.join2(module_metadata.include_paths, deps:get("includedirs") or {})
+    end
+
+    -- add definitions
+    module_metadata.definitions = table.wrap(target:get("defines")) or {}
+    for _, deps in ipairs(target:orderdeps()) do
+        table.join2(module_metadata.definitions, deps:get("defines") or {})
+    end
+
+    -- add imports
+    if requires then
+        for name, _ in pairs(requires) do
+            module_metadata.imports = module_metadata.imports or {}
+            table.append(module_metadata.imports, name)
+        end
+    end
+
+    module_metadata._VENDOR_extension = { xmake = { name = name, file = path.filename(sourcefile) }}
+
+    return module_metadata
+end
+
+function install_module_target(target)
+    local sourcebatch = target:sourcebatches()["c++.build.modules.install"]
+    if sourcebatch and sourcebatch.sourcefiles then
+        for _, sourcefile in ipairs(sourcebatch.sourcefiles) do
+            local prefixdir = path.join("modules", target:name())
+            local fileconfig = target:fileconfig(sourcefile)
+            if fileconfig and fileconfig.prefixdir then
+                prefixdir = fileconfig.prefixdir
+            end
+            local install = (fileconfig and not fileconfig.install) and false or true
+            if install then
+                target:add("installfiles", sourcefile, {prefixdir = prefixdir})
+                local outputdir = get_outputdir(target,sourcefile)
+                local metafile = path.join(outputdir, path.filename(sourcefile) .. ".meta-info")
+                if os.exists(metafile) then
+                    target:add("installfiles", metafile, {prefixdir = prefixdir})
+                end
+            end
+        end
+    end
+end
+
+function get_outputdir(target, module)
+    local cachedir = modules_cachedir(target)
+    local modulepath = module.path or module
+    local cached = localcache():get2("modules_paths", modulepath)
+    if cached then
+        if not os.exists(cached) then
+            os.mkdir(cached)
+        end
+        return cached
+    else
+        local key = path.directory(modulepath) .. target:name()
+        local hashed = hash.uuid(key):split("-", {plain = true})[1]:lower()
+        local moduledir = path.join(cachedir, hashed)
+        localcache():set2("modules_paths", modulepath, moduledir)
+        if not os.exists(moduledir) then
+            os.mkdir(moduledir)
+        end
+        return moduledir
     end
 end

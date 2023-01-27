@@ -87,7 +87,7 @@ Xmake ≈ Make/Ninja + CMake/Meson + Vcpkg/Conan + distcc + ccache/sccache
 
 如果你想要了解更多，请参考：[在线文档](https://xmake.io/#/zh-cn/getting_started), [Github](https://github.com/xmake-io/xmake)以及[Gitee](https://gitee.com/tboox/xmake)，同时也欢迎加入我们的 [社区](https://xmake.io/#/zh-ch/about/contact).
 
-![](https://xmake.io/assets/img/index/xmake-basic-render.gif)
+![](https://github.com/xmake-io/xmake-docs/raw/master/assets/img/index/xmake-basic-render.gif)
 
 ## 课程
 
@@ -121,15 +121,21 @@ Invoke-Expression (Invoke-Webrequest 'https://xmake.io/psget.text' -UseBasicPars
 
 ## 简单的工程描述
 
-<img src="https://xmake.io/assets/img/index/showcode1.png" width="340px" />
+```lua
+target("hello")
+    set_kind("binary")
+    add_files("src/*.cpp")
+```
 
 ## 包依赖描述
 
-<img src="https://xmake.io/assets/img/index/add_require.png" width="600px" />
+```lua
+add_requires("tbox 1.6.*", "zlib", "libpng ~1.6")
+```
 
 官方的xmake包管理仓库: [xmake-repo](https://github.com/xmake-io/xmake-repo)
 
-<img src="https://xmake.io/assets/img/index/package.gif" width="650px" />
+<img src="https://github.com/xmake-io/xmake-docs/raw/master/assets/img/index/package.gif" width="650px" />
 
 ## 创建工程
 
@@ -285,6 +291,8 @@ c51           Keil development tools for the 8051 Microcontroller Architecture
 icx           Intel LLVM C/C++ Compiler
 dpcpp         Intel LLVM C++ Compiler for data parallel programming model based on Khronos SYCL
 masm32        The MASM32 SDK
+iverilog      Icarus Verilog
+verilator     Verilator open-source SystemVerilog simulator and lint system
 ```
 
 ## 支持语言
@@ -302,6 +310,7 @@ masm32        The MASM32 SDK
 * Vala
 * Pascal
 * Nim
+* Verilog
 
 ## 支持特性
 

@@ -2,6 +2,13 @@
 
 ## master (unreleased)
 
+## v1.7.3
+
+### Changes
+
+* Improve support for xp and mingw
+* Improve configure to support debian package better
+
 ## v1.7.2
 
 ### New features
@@ -273,6 +280,13 @@
 # 更新日志
 
 ## master (开发中)
+
+## v1.7.3
+
+### 改进
+
+* 改进对 xp 和 mingw 的支持
+* 改进 configure 构建脚本，更好的支持 debian 打包
 
 ## v1.7.2
 

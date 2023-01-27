@@ -85,7 +85,7 @@ Xmake ≈ Make/Ninja + CMake/Meson + Vcpkg/Conan + distcc + ccache/sccache
 
 If you want to know more, please refer to: [Documents](https://xmake.io/#/getting_started), [Github](https://github.com/xmake-io/xmake) and [Gitee](https://gitee.com/tboox/xmake). You are also welcome to join our [community](https://xmake.io/#/about/contact).
 
-![](https://xmake.io/assets/img/index/xmake-basic-render.gif)
+![](https://github.com/xmake-io/xmake-docs/raw/master/assets/img/index/xmake-basic-render.gif)
 
 ## Installation
 
@@ -113,15 +113,21 @@ If you don't want to use the script to install xmake, see [Installation Guide](h
 
 ## Simple description
 
-<img src="https://xmake.io/assets/img/index/showcode1.png" width="340px" />
+```lua
+target("hello")
+    set_kind("binary")
+    add_files("src/*.cpp")
+```
 
 ## Package dependences
 
-<img src="https://xmake.io/assets/img/index/add_require.png" width="600px" />
+```lua
+add_requires("tbox 1.6.*", "zlib", "libpng ~1.6")
+```
 
 An official xmake package repository exists at: [xmake-repo](https://github.com/xmake-io/xmake-repo)
 
-<img src="https://xmake.io/assets/img/index/package.gif" width="650px" />
+<img src="https://github.com/xmake-io/xmake-docs/raw/master/assets/img/index/package.gif" width="650px" />
 
 ## Create project
 
@@ -276,6 +282,8 @@ c51           Keil development tools for the 8051 Microcontroller Architecture
 icx           Intel LLVM C/C++ Compiler
 dpcpp         Intel LLVM C++ Compiler for data parallel programming model based on Khronos SYCL
 masm32        The MASM32 SDK
+iverilog      Icarus Verilog
+verilator     Verilator open-source SystemVerilog simulator and lint system
 ```
 
 ## Supported Languages
@@ -294,6 +302,7 @@ masm32        The MASM32 SDK
 * Vala
 * Pascal
 * Nim
+* Verilog
 
 ## Supported Features
 

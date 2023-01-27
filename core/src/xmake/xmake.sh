@@ -5,20 +5,32 @@ target "xmake"
     set_default false
 
     # add deps
-    local libs="lua_cjson lz4 sv tbox"
-    for lib in $libs; do
-        if has_config "$lib"; then
-            add_options "$lib" "{public}"
+    if has_config "external"; then
+        local libs="lz4 sv tbox"
+        for lib in $libs; do
+            if has_config "$lib"; then
+                add_options "$lib" "{public}"
+            fi
+        done
+        if is_config "runtime" "luajit"; then
+            if has_config "luajit"; then
+                add_options "luajit" "{public}"
+            fi
         else
-            add_deps "$lib"
+            if has_config "lua"; then
+                add_options "lua" "{public}"
+            fi
         fi
-    done
-    if is_config "runtime" "luajit" && has_config "luajit"; then
-        add_options "luajit" "{public}"
-    elif has_config "lua"; then
-        add_options "lua" "{public}"
     else
-        add_deps "lua"
+        local libs="lua_cjson lz4 sv tbox"
+        for lib in $libs; do
+            add_deps "$lib"
+        done
+        if is_config "runtime" "luajit"; then
+            add_deps "luajit"
+        else
+            add_deps "lua"
+        fi
     fi
 
     # add options

@@ -246,7 +246,7 @@ end
 
 -- make the define flag
 function nf_define(self, macro)
-    return "-D" .. macro
+    return {"-D" .. macro}
 end
 
 -- make the undefine flag
@@ -397,7 +397,7 @@ function link(self, objectfiles, targetkind, targetfile, flags)
     if option.get("verbose") then
         os.execv(program, argv, {envs = self:runenvs()})
     else
-        os.runv(program, argv, {envs = self:runenvs()})
+        os.vrunv(program, argv, {envs = self:runenvs()})
     end
 end
 
@@ -440,6 +440,8 @@ function _preprocess(program, argv, opt)
             is_gcc = true
         elseif tool:name():startswith("clang") then
             is_clang = true
+        elseif tool:name() == "circle" then
+            return
         end
     end
 

@@ -54,6 +54,12 @@ print() {
     printf "${@}\n"
 }
 
+wprint() {
+    if "${xmake_sh_verbose}"; then
+        printf "warning: ${@}\n"
+    fi
+}
+
 # test empty string
 test_z() {
     if test "x${1}" = "x"; then
@@ -385,20 +391,24 @@ path_toolname() {
         */gcc) toolname="gcc";;
         gcc) toolname="gcc";;
         gcc-*) toolname="gcc";;
+        */gcc-*) toolname="gcc";;
         *-g++) toolname="gxx";;
         */g++) toolname="gxx";;
         g++) toolname="gxx";;
         g++-*) toolname="gxx";;
+        */g++-*) toolname="gxx";;
         xcrun*clang++) toolname="clangxx";;
         xcrun*clang) toolname="clang";;
         *-clang++) toolname="clangxx";;
         */clang++) toolname="clangxx";;
         clang++) toolname="clangxx";;
         clang++-*) toolname="clangxx";;
+        */clang++-*) toolname="clangxx";;
         *-clang) toolname="clang";;
         */clang) toolname="clang";;
         clang) toolname="clang";;
         clang-*) toolname="clang";;
+        */clang-*) toolname="clang";;
         *-ar) toolname="ar";;
         */ar) toolname="ar";;
         ar) toolname="ar";;
@@ -655,9 +665,9 @@ if test -d "/usr/local"; then
 elif test -d "/usr"; then
     _install_prefix_default="/usr"
 fi
-_install_bindir_default="bin"
-_install_libdir_default="lib"
-_install_includedir_default="include"
+_install_bindir_default="\${prefix}/bin"
+_install_libdir_default="\${prefix}/lib"
+_install_includedir_default="\${prefix}/include"
 
 # determining target platform
 # e.g.
@@ -1625,6 +1635,9 @@ _get_target_compiler_flags() {
     fi
 
     # get flags from environments, e.g. $CFLAGS, $CXXFLAGS
+    if test_nz "${CPPFLAGS}"; then
+        result="${result} ${CPPFLAGS}"
+    fi
     if test_eq "${flagname}" "cflags" && test_nz "${CFLAGS}"; then
         result="${result} ${CFLAGS}"
     fi
@@ -2570,12 +2583,15 @@ Common options:
   --toolchain=TOOLCHAIN   Set toolchain name.
                             - clang
                             - gcc
+  --buildir=DIR           Set build directory. (default: '"${xmake_sh_buildir}"')
 
+Autoconf options:
+  --build=BUILD           Configure for building on BUILD [guessed]
+  --host=HOST             Cross-compile to build programs to run on HOST [BUILD]
   --prefix=PREFIX         Set install files directory in tree rooted at PREFIX. (default: '"${_install_prefix_default}"')
   --bindir=DIR            Set install binaries directory in PREFIX/DIR. (default: '"${_install_bindir_default}"')
   --libdir=DIR            Set install libraries directory in PREFIX/DIR. (default: '"${_install_libdir_default}"')
   --includedir=DIR        Set install includes directory in PREFIX/DIR. (default: '"${_install_includedir_default}"')
-  --buildir=DIR           Set build directory. (default: '"${xmake_sh_buildir}"')
 
 Project options:
 '"$(_show_options_usage)"'
@@ -2603,6 +2619,7 @@ _show_version() {
 # --foo=yes => foo
 _parse_argument_name() {
     _ret=$(echo "${1#*--}" | sed "s/${2-=[^=]*}$//")
+    string_replace "${_ret}" "-" "_"
 }
 
 # --foo=yes => yes
@@ -2662,6 +2679,12 @@ _handle_option() {
     elif test_eq "${name}" "buildir"; then
         xmake_sh_buildir="${value}"
         return 0
+    elif test_eq "${name}" "build"; then
+        _autoconf_build_type="${value}"
+        return 0
+    elif test_eq "${name}" "host"; then
+        _autoconf_host_type="${value}"
+        return 0
     elif _has_option "${name}"; then
         _set_option_value "${name}" "${value}"
         return 0
@@ -2669,12 +2692,94 @@ _handle_option() {
     return 1
 }
 while test $# != 0; do
-    if _handle_option ${1}; then
-        shift
-    else
-        raise "Unknown option: $1"
+    if ! _handle_option ${1}; then
+        wprint "unknown option: $1"
     fi
+    shift
 done
+
+#-----------------------------------------------------------------------------
+# handle some autoconf configurations
+#
+
+# parse triplet
+# e.g. i686-linux-gnu, aarch64-apple-darwin, x86_64-w64-mingw32
+_parse_triplet() {
+    local triplet="${1}"
+    string_split "${triplet}" "-"
+}
+
+_get_arch_from_cpu() {
+    local cpu="${1}"
+    case "${cpu}" in
+        i686) _ret="i386";;
+        i386) _ret="i386";;
+        x86_64) _ret="x86_64";;
+        aarch64) _ret="arm64";;
+        arm64) _ret="arm64";;
+        arm*) _ret="arm";;
+        *) _ret="${cpu}";;
+    esac
+}
+
+_get_plat_from_vendor_os() {
+    local vendor="${1}"
+    local os="${2}"
+    case "${vendor}" in
+        linux)
+            if string_contains "${os}" "android"; then
+                _ret="android"
+            else
+                _ret="linux"
+            fi
+            ;;
+        apple)
+            if test_eq "${os}" "darwin"; then
+                _ret="macosx"
+            fi
+            ;;
+        w64) _ret="mingw";;
+    esac
+}
+
+_handle_autoconf_configs() {
+    if test_z "${_autoconf_host_type}"; then
+        _autoconf_host_type="${_autoconf_build_type}"
+    fi
+
+    if test_nz "${_autoconf_build_type}"; then
+        _parse_triplet "${_autoconf_build_type}"; local cpu="${_ret}"; local vendor="${_ret2}"; local os="${_ret3}"
+        _get_arch_from_cpu "${cpu}"
+        if test_nz "${_ret}"; then
+            os_arch="${_ret}"
+        else
+            wprint "unknown cpu: ${cpu} in --build=${value}"
+        fi
+        _get_plat_from_vendor_os "${vendor}" "${os}"
+        if test_nz "${_ret}"; then
+            os_host="${_ret}"
+        else
+            wprint "unknown vendor-os: ${vendor}-${os} in --build=${value}"
+        fi
+    fi
+
+    if test_nz "${_autoconf_host_type}"; then
+        _parse_triplet "${_autoconf_host_type}"; local cpu="${_ret}"; local vendor="${_ret2}"; local os="${_ret3}"
+        _get_arch_from_cpu "${cpu}"
+        if test_nz "${_ret}"; then
+            _target_arch_default="${_ret}"
+        else
+            wprint "unknown cpu: ${cpu} in --host=${value}"
+        fi
+        _get_plat_from_vendor_os "${vendor}" "${os}"
+        if test_nz "${_ret}"; then
+            _target_plat_default="${_ret}"
+        else
+            wprint "unknown vendor-os: ${vendor}-${os} in --build=${value}"
+        fi
+    fi
+}
+_handle_autoconf_configs
 
 #-----------------------------------------------------------------------------
 # detect platform and toolchains
@@ -2738,6 +2843,18 @@ toolchain "i686_w64_mingw32"
     set_toolset "ld" "i686-w64-mingw32-g++" "i686-w64-mingw32-gcc"
     set_toolset "sh" "i686-w64-mingw32-g++" "i686-w64-mingw32-gcc"
     set_toolset "ar" "i686-w64-mingw32-ar" "ar"
+toolchain_end
+
+# aarch64 toolchain (aarch64)
+toolchain "aarch64_linux_gnu"
+    set_toolset "as" "aarch64-linux-gnu-gcc"
+    set_toolset "cc" "aarch64-linux-gnu-gcc"
+    set_toolset "cxx" "aarch64-linux-gnu-gcc" "aarch64-linux-gnu-g++"
+    set_toolset "mm" "aarch64-linux-gnu-gcc"
+    set_toolset "mxx" "aarch64-linux-gnu-gcc" "aarch64-linux-gnu-g++"
+    set_toolset "ld" "aarch64-linux-gnu-g++" "aarch64-linux-gnu-gcc"
+    set_toolset "sh" "aarch64-linux-gnu-g++" "aarch64-linux-gnu-gcc"
+    set_toolset "ar" "aarch64-linux-gnu-ar" "ar"
 toolchain_end
 
 # check platform
@@ -3056,6 +3173,11 @@ _toolchain_detect() {
             else
                 toolchains="x86_64_w64_mingw32"
             fi
+        elif is_plat "linux" && ! is_arch "${os_arch}"; then
+            toolchains="envs"
+            if is_arch "arm64"; then
+                toolchains="${toolchains} aarch64_linux_gnu"
+            fi
         else
             toolchains="envs gcc clang"
         fi
@@ -3093,7 +3215,7 @@ _get_funccode() {
     if string_contains "${func}" "("; then
         code="${func}"
     else
-        code="volatile void* p${func} = (void*)&${func};"
+        code="typedef void (*func_t)(); volatile func_t p${func} = (func_t)${func}; while (p${func}) {break;};"
     fi
     _ret="${code}"
 }
@@ -3199,6 +3321,18 @@ _check_cxsnippets() {
                 compflags="${compflags} ${flags}"
             fi
         done
+        if test_eq "${sourcekind}" "cxx"; then
+            if test_nz "${CXXFLAGS}"; then
+                compflags="${compflags} ${CXXFLAGS}"
+            fi
+        else
+            if test_nz "${CFLAGS}"; then
+                compflags="${compflags} ${CFLAGS}"
+            fi
+        fi
+        if test_nz "${CPPFLAGS}"; then
+            compflags="${compflags} ${CPPFLAGS}"
+        fi
         _toolchain_compcmd "${sourcekind}" "${objectfile}" "${sourcefile}" "${compflags}"; local compcmd="${_ret}"
         if ${xmake_sh_diagnosis}; then
             print "> ${compcmd}"
@@ -3231,6 +3365,9 @@ _check_cxsnippets() {
         _get_option_item "${name}" "ldflags"; local flags="${_ret}"
         if test_nz "${flags}"; then
             linkflags="${linkflags} ${flags}"
+        fi
+        if test_nz "${LDFLAGS}"; then
+            linkflags="${linkflags} ${LDFLAGS}"
         fi
         _toolchain_linkcmd "${toolkind}" "${binaryfile}" "${objectfile}" "${linkflags}"; local linkcmd="${_ret}"
         if ${xmake_sh_diagnosis}; then
@@ -3290,12 +3427,28 @@ _check_cxxsnippets() {
 # check option
 _check_option() {
     local name="${1}"
-    _get_option_item "${name}" "before_check"; local before_check="${_ret}"
-    if test_nz "${before_check}"; then
-        eval ${before_check}
-    fi
-    if _check_csnippets "${name}" && _check_cxxsnippets "${name}"; then
-        return 0
+    _get_option_value "${name}"; local value="${_ret}"
+    _get_option_item "${name}" "default"; local default="${_ret}"
+    if test_nz "${value}"; then
+        if _is_enabled "${value}"; then
+            return 0
+        else
+            return 1
+        fi
+    elif test_nz "${default}"; then
+        if _is_enabled "${default}"; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        _get_option_item "${name}" "before_check"; local before_check="${_ret}"
+        if test_nz "${before_check}"; then
+            eval ${before_check}
+        fi
+        if _check_csnippets "${name}" && _check_cxxsnippets "${name}"; then
+            return 0
+        fi
     fi
     return 1
 }
@@ -3583,16 +3736,17 @@ _gmake_add_switches() {
     echo "INSTALLDIR:=\$(DESTDIR)" >> "${xmake_sh_makefile}"
     echo "endif" >> "${xmake_sh_makefile}"
     echo "" >> "${xmake_sh_makefile}"
+    echo "ifeq (\$(PREFIX),)" >> "${xmake_sh_makefile}"
+    echo "PREFIX=${_install_prefix_default}" >> "${xmake_sh_makefile}"
+    echo "endif" >> "${xmake_sh_makefile}"
+    echo "" >> "${xmake_sh_makefile}"
     echo "ifneq (\$(PREFIX),)" >> "${xmake_sh_makefile}"
     echo "ifneq (\$(INSTALLDIR),)" >> "${xmake_sh_makefile}"
-    echo "INSTALLDIR:=\$(INSTALLDIR)/\$(PREFIX)" >> "${xmake_sh_makefile}"
+    echo "PREFIX_:=\$(patsubst /%,%,\$(PREFIX))" >> "${xmake_sh_makefile}"
+    echo "INSTALLDIR:=\$(INSTALLDIR)/\$(PREFIX_)" >> "${xmake_sh_makefile}"
     echo "else" >> "${xmake_sh_makefile}"
     echo "INSTALLDIR:=\$(PREFIX)" >> "${xmake_sh_makefile}"
     echo "endif" >> "${xmake_sh_makefile}"
-    echo "endif" >> "${xmake_sh_makefile}"
-    echo "" >> "${xmake_sh_makefile}"
-    echo "ifeq (\$(INSTALLDIR),)" >> "${xmake_sh_makefile}"
-    echo "INSTALLDIR=${_install_prefix_default}" >> "${xmake_sh_makefile}"
     echo "endif" >> "${xmake_sh_makefile}"
     echo "" >> "${xmake_sh_makefile}"
 }
@@ -3824,18 +3978,23 @@ _gmake_add_install_target() {
     # install target file
     _get_target_item "${target}" "kind"; local targetkind="${_ret}"
     if test_eq "${targetkind}" "binary"; then
-        print "\t@mkdir -p ${installdir}/${_install_bindir_default}" >> "${xmake_sh_makefile}"
-        print "\t@cp -p ${targetfile} ${installdir}/${_install_bindir_default}/${filename}" >> "${xmake_sh_makefile}"
+        string_replace "${_install_bindir_default}" "\${prefix}" "${installdir}"; _install_bindir_default="${_ret}"
+        print "\t@echo installing ${targetfile} to ${_install_bindir_default}" >> "${xmake_sh_makefile}"
+        print "\t@mkdir -p ${_install_bindir_default}" >> "${xmake_sh_makefile}"
+        print "\t@cp -p ${targetfile} ${_install_bindir_default}/${filename}" >> "${xmake_sh_makefile}"
     elif test_eq "${targetkind}" "static" || test_eq "${targetkind}" "shared"; then
-        print "\t@mkdir -p ${installdir}/${_install_libdir_default}" >> "${xmake_sh_makefile}"
-        print "\t@cp -p ${targetfile} ${installdir}/${_install_libdir_default}/${filename}" >> "${xmake_sh_makefile}"
+        string_replace "${_install_libdir_default}" "\${prefix}" "${installdir}"; _install_libdir_default="${_ret}"
+        print "\t@echo installing ${targetfile} to ${_install_libdir_default}" >> "${xmake_sh_makefile}"
+        print "\t@mkdir -p ${_install_libdir_default}" >> "${xmake_sh_makefile}"
+        print "\t@cp -p ${targetfile} ${_install_libdir_default}/${filename}" >> "${xmake_sh_makefile}"
     fi
 
     # install header files
     _get_target_item "${target}" "headerfiles"; local headerfiles="${_ret}"
     if test_nz "${headerfiles}"; then
+        string_replace "${_install_includedir_default}" "\${prefix}" "${installdir}"; _install_includedir_default="${_ret}"
         local srcheaderfile=""
-        local includedir="${installdir}/${_install_includedir_default}"
+        local includedir="${_install_includedir_default}"
         for srcheaderfile in ${headerfiles}; do
             string_split "${srcheaderfile}" ":"
             local srcheaderfile="${_ret}"
@@ -3910,6 +4069,9 @@ _gmake_add_install() {
 
 _gmake_done() {
     echo "makefile is generated!"
+    if "${xmake_sh_diagnosis}"; then
+        cat "${xmake_sh_makefile}"
+    fi
 }
 
 # generate build file for gmake

@@ -20,6 +20,7 @@
 
 -- imports
 import("core.base.option")
+import("core.base.json")
 import("core.tool.compiler")
 import("core.project.project")
 import("core.project.depend")
@@ -104,9 +105,9 @@ end
 
 -- do compile for batchcmds
 -- @note we need use batchcmds:compilev to translate paths in compflags for generator, e.g. -Ixx
-function _batchcmds_compile(batchcmds, target, flags)
+function _batchcmds_compile(batchcmds, target, flags, sourcefile)
     local compinst = target:compiler("cxx")
-    local compflags = compinst:compflags({target = target})
+    local compflags = compinst:compflags({sourcefile = sourcefile}, {target = target})
     batchcmds:compilev(table.join(compflags or {}, flags), {compiler = compinst, sourcekind = "cxx"})
 end
 
@@ -115,7 +116,7 @@ function _build_modulefile(target, sourcefile, opt)
     local objectfile = opt.objectfile
     local dependfile = opt.dependfile
     local compinst = compiler.load("cxx", {target = target})
-    local compflags = table.join("-x", "c++", compinst:compflags({target = target}))
+    local compflags = table.join("-x", "c++", compinst:compflags({sourcefile = sourcefile, target = target}))
     local dependinfo = option.get("rebuild") and {} or (depend.load(dependfile) or {})
 
     -- need build this object?
@@ -169,7 +170,6 @@ end
 
 -- generate dependency files
 function generate_dependencies(target, sourcebatch, opt)
-    local cachedir = common.modules_cachedir(target)
     local compinst = target:compiler("cxx")
     local common_args = {"-E", "-x", "c++"}
     local depformatflag = get_depflag(target, "p1689r5") or get_depflag(target, "trtbd")
@@ -183,17 +183,13 @@ function generate_dependencies(target, sourcebatch, opt)
                 progress.show(opt.progress, "${color.build.object}generating.module.deps %s", sourcefile)
             end
 
-            local outputdir = path.translate(path.join(cachedir, path.directory(path.relative(sourcefile, projectdir))))
-            if not os.isdir(outputdir) then
-                os.mkdir(outputdir)
-            end
-
+            local outputdir = common.get_outputdir(target, sourcefile)
             local jsonfile = path.translate(path.join(outputdir, path.filename(sourcefile) .. ".json"))
-            if depformatflag and depfileflag and depoutputflag then
+            if depformatflag and depfileflag and depoutputflag and not target:policy("build.c++.gcc.fallbackscanner") then
                 local ifile = path.translate(path.join(outputdir, path.filename(sourcefile) .. ".i"))
                 local dfile = path.translate(path.join(outputdir, path.filename(sourcefile) .. ".d"))
                 local args = {sourcefile, "-MT", jsonfile, "-MD", "-MF", dfile, depformatflag, depfileflag .. jsonfile, depoutputflag .. target:objectfile(sourcefile), "-o", ifile}
-                local compflags = compinst:compflags({target = target})
+                local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
                 -- module mapper flag force gcc to check the imports but this is not wanted at this stage
                 local modulemapperflag = get_modulemapperflag(target) .. path.translate(_get_module_mapper(target))
                 table.remove(compflags, table.unpack(table.find(compflags, modulemapperflag)))
@@ -203,28 +199,11 @@ function generate_dependencies(target, sourcebatch, opt)
             else
                 common.fallback_generate_dependencies(target, jsonfile, sourcefile, function(file)
                     local compinst = target:compiler("cxx")
-                    local defines = {}
-                    for _, define in ipairs(target:get("defines")) do
-                        table.insert(defines, "-D" .. define)
-                    end
-                    local includedirs = table.join({}, target:get("includedirs"))
-                    for _, dep in ipairs(target:orderdeps()) do
-                        local includedir = dep:get("sysincludedirs") or dep:get("includedirs")
-                        if includedir then
-                            table.join2(includedirs, includedir)
-                        end
-                    end
-                    for _, pkg in pairs(target:pkgs()) do
-                        local includedir = pkg:get("sysincludedirs") or pkg:get("includedirs")
-                        if includedir then
-                            table.join2(includedirs, includedir)
-                        end
-                    end
-                    for i, includedir in pairs(includedirs) do
-                        includedirs[i] = "-I" .. includedir
-                    end
+                    local compflags = compinst:compflags({sourcefile = file, target = target})
+                    -- exclude -fmodule* flags because, when they are set gcc try to find bmi of imported modules but they don't exists a this point of compilation
+                    table.remove_if(compflags, function(_, flag) return flag:startswith("-fmodule") end)
                     local ifile = path.translate(path.join(outputdir, path.filename(file) .. ".i"))
-                    os.vrunv(compinst:program(), table.join(common_args, includedirs, defines, {get_cppversionflag(target), file,  "-o", ifile}))
+                    os.vrunv(compinst:program(), table.join(common_args, compflags, {file,  "-o", ifile}))
                     local content = io.readfile(ifile)
                     os.rm(ifile)
                     return content
@@ -304,37 +283,27 @@ end
 function generate_user_headerunits_for_batchjobs(target, batchjobs, headerunits, opt)
     local compinst = target:compiler("cxx")
     local mapper_file = _get_module_mapper(target)
-    local cachedir = common.modules_cachedir(target)
 
     -- build headerunits
     local projectdir = os.projectdir()
     for _, headerunit in ipairs(headerunits) do
-        local file = path.relative(headerunit.path, projectdir)
-        local objectfile = target:objectfile(file)
-        local outputdir
         local headerunit_path
-        if headerunit.type == ":quote" then
-            outputdir = path.join(cachedir, path.directory(path.relative(headerunit.path, projectdir)))
-        else
-            outputdir = path.join(cachedir, path.directory(headerunit.path))
-        end
-        local bmifilename = path.basename(objectfile) .. get_bmi_extension()
-        local bmifile = (outputdir and path.join(outputdir, bmifilename) or bmifilename)
         if headerunit.type == ":quote" then
             headerunit_path = path.join(".", path.relative(headerunit.path, projectdir))
         elseif headerunit.type == ":angle" then
             -- if path is relative then its a subtarget path
             headerunit_path = path.is_absolute(headerunit.path) and headerunit.path or path.join(".", headerunit.path)
         end
+        local objectfile = target:objectfile(headerunit_path)
+        local outputdir = common.get_outputdir(target, headerunit.path)
+        local bmifilename = path.basename(objectfile) .. get_bmi_extension()
+        local bmifile = path.join(outputdir, bmifilename)
         batchjobs:addjob(headerunit.name, function (index, total)
             depend.on_changed(function()
                 progress.show((index * 100) / total, "${color.build.object}compiling.headerunit.$(mode) %s", headerunit.name)
                 local objectdir = path.directory(objectfile)
                 if not os.isdir(objectdir) then
                     os.mkdir(objectdir)
-                end
-                if not os.isdir(outputdir) then
-                    os.mkdir(outputdir)
                 end
 
                 -- generate headerunit
@@ -355,26 +324,11 @@ end
 -- generate target user header units for batchcmds
 function generate_user_headerunits_for_batchcmds(target, batchcmds, headerunits, opt)
     local mapper_file = _get_module_mapper(target)
-    local cachedir = common.modules_cachedir(target)
 
     -- build headerunits
     local projectdir = os.projectdir()
     local depmtime = 0
     for _, headerunit in ipairs(headerunits) do
-        local file = path.relative(headerunit.path, projectdir)
-        local objectfile = target:objectfile(file)
-        local outputdir
-        if headerunit.type == ":quote" then
-            outputdir = path.join(cachedir, path.directory(path.relative(headerunit.path, projectdir)))
-        else
-            outputdir = path.join(cachedir, path.directory(headerunit.path))
-        end
-        batchcmds:mkdir(outputdir)
-
-        local bmifilename = path.basename(objectfile) .. get_bmi_extension()
-        local bmifile = (outputdir and path.join(outputdir, bmifilename) or bmifilename)
-        batchcmds:mkdir(path.directory(objectfile))
-
         local flags = {"-c"}
         local headerunit_path
         if headerunit.type == ":quote" then
@@ -385,6 +339,13 @@ function generate_user_headerunits_for_batchcmds(target, batchcmds, headerunits,
             -- if path is relative then its a subtarget path
             headerunit_path = path.is_absolute(headerunit.path) and headerunit.path or path.join(".", headerunit.path)
         end
+        local objectfile = target:objectfile(headerunit_path)
+        local outputdir = common.get_outputdir(target, headerunit.path)
+        batchcmds:mkdir(outputdir)
+
+        local bmifilename = path.basename(objectfile) .. get_bmi_extension()
+        local bmifile = (outputdir and path.join(outputdir, bmifilename) or bmifilename)
+        batchcmds:mkdir(path.directory(objectfile))
 
         batchcmds:show_progress(opt.progress, "${color.build.object}compiling.headerunit.$(mode) %s", headerunit.name)
         _batchcmds_compile(batchcmds, target, flags)
@@ -424,6 +385,24 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
             end
             local moduleinfo = table.copy(provide) or {}
             local dependfile = (provide and provide.bmi) and target:dependfile(provide.bmi) or target:dependfile(objectfile)
+
+            if provide then
+                local fileconfig = target:fileconfig(cppfile)
+                if fileconfig and fileconfig.install then
+                    batchjobs:addjob(name .. "_metafile", function(index, total)
+                        local outputdir = common.get_outputdir(target, cppfile)
+                        local metafilepath = path.join(outputdir, path.filename(cppfile) .. ".meta-info")
+                        depend.on_changed(function()
+                            progress.show((index * 100) / total, "${color.build.object}generating.module.metadata %s", name)
+                            local metadata = common.generate_meta_module_info(target, name, cppfile, module.requires)
+                            json.savefile(metafilepath, metadata)
+
+                        end, {dependfile = target:dependfile(metafilepath), files = {cppfile}})
+
+                    end, {rootjob = opt.rootjob})
+                end
+            end
+
             table.join2(moduleinfo, {
                 name = name or cppfile,
                 deps = table.keys(module.requires or {}),
@@ -445,11 +424,16 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                     end
 
                     if provide or common.has_module_extension(cppfile) then
-                        _build_modulefile(target, cppfile, {
-                            objectfile = objectfile,
-                            dependfile = dependfile,
-                            name = name or cppfile,
-                            progress = (index * 100) / total})
+                        if not common.memcache():get2(name or cppfile, "compiling") then
+                            if name and module.external then
+                                common.memcache():set2(name or cppfile, "compiling", true)
+                            end
+                            _build_modulefile(target, cppfile, {
+                                objectfile = objectfile,
+                                dependfile = dependfile,
+                                name = name or cppfile,
+                                progress = (index * 100) / total})
+                        end
                         target:add("objectfiles", objectfile)
                     end
                 end)})

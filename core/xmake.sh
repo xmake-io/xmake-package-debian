@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set_project "xmake"
-set_version "2.7.5" "%Y%m%d%H%M"
+set_version "2.7.6" "%Y%m%d"
 
 # set warning all
 set_warnings "all"
@@ -34,6 +34,9 @@ fi
 
 # the runtime option, lua or luajit
 option "runtime" "Use luajit or lua runtime" "lua"
+
+# always use external dependencies
+option "external" "Always use external dependencies" false
 
 # the readline option
 option "readline"
@@ -75,17 +78,6 @@ void test() {\n
 }"
 option_end
 
-# the lua-cjson option
-option "lua_cjson"
-    add_links "lua5.1-cjson"
-    add_csnippets "
-int luaopen_cjson(void *l);\n
-void test() {\n
-    luaopen_cjson(0);\n
-}
-"
-option_end
-
 # the lua option
 option "lua"
     add_cfuncs "lua_pushstring"
@@ -95,9 +87,19 @@ option "lua"
 option_end
 
 option_find_lua() {
+    local ldflags=""
+    local cflags=""
     option "lua"
-        add_cflags `pkg-config --cflags lua5.4 2>/dev/null`
-        add_ldflags `pkg-config --libs lua5.4 2>/dev/null`
+        cflags=`pkg-config --cflags lua5.4 2>/dev/null`
+        ldflags=`pkg-config --libs lua5.4 2>/dev/null`
+        if test_z "${cflags}"; then
+            cflags="-I/usr/include/lua5.4"
+        fi
+        if test_z "${ldflags}"; then
+            ldflags="-llua5.4"
+        fi
+        add_cflags "${cflags}"
+        add_ldflags "${ldflags}"
     option_end
 }
 
@@ -110,9 +112,19 @@ option "luajit"
 option_end
 
 option_find_luajit() {
+    local ldflags=""
+    local cflags=""
     option "luajit"
-        add_cflags `pkg-config --cflags luajit 2>/dev/null`
-        add_ldflags `pkg-config --libs luajit 2>/dev/null`
+        cflags=`pkg-config --cflags luajit 2>/dev/null`
+        ldflags=`pkg-config --libs luajit 2>/dev/null`
+        if test_z "${cflags}"; then
+            cflags="-I/usr/include/luajit-2.1"
+        fi
+        if test_z "${ldflags}"; then
+            ldflags="-lluajit"
+        fi
+        add_cflags "${cflags}"
+        add_ldflags "${ldflags}"
     option_end
 }
 
@@ -124,9 +136,19 @@ option "lz4"
 option_end
 
 option_find_lz4() {
+    local ldflags=""
+    local cflags=""
     option "lz4"
-        add_cflags `pkg-config --cflags liblz4 2>/dev/null`
-        add_ldflags `pkg-config --libs liblz4 2>/dev/null`
+        cflags=`pkg-config --cflags liblz4 2>/dev/null`
+        ldflags=`pkg-config --libs liblz4 2>/dev/null`
+        if test_z "${cflags}"; then
+            cflags="-I/usr/include"
+        fi
+        if test_z "${ldflags}"; then
+            ldflags="-llz4"
+        fi
+        add_cflags "${cflags}"
+        add_ldflags "${ldflags}"
     option_end
 }
 
@@ -139,15 +161,19 @@ option "sv"
 option_end
 
 option_find_sv() {
+    local ldflags=""
+    local cflags=""
     option "sv"
-        local dirs="/usr/local /usr"
-        for dir in $dirs; do
-            if test -f "${dir}/lib/libsv.a"; then
-                add_linkdirs "${dir}/lib"
-                add_includedirs "${dir}/include/sv"
-                break
-            fi
-        done
+        cflags=`pkg-config --cflags libsv 2>/dev/null`
+        ldflags=`pkg-config --libs libsv 2>/dev/null`
+        if test_z "${cflags}"; then
+            cflags="-I/usr/include"
+        fi
+        if test_z "${ldflags}"; then
+            ldflags="-lsv"
+        fi
+        add_cflags "${cflags}"
+        add_ldflags "${ldflags}"
     option_end
 }
 
@@ -160,38 +186,33 @@ option "tbox"
 option_end
 
 option_find_tbox() {
+    local ldflags=""
+    local cflags=""
     option "tbox"
-        local dirs="/usr/local /usr"
-        for dir in $dirs; do
-            if test -f "${dir}/lib/libtbox.a"; then
-                add_linkdirs "${dir}/lib"
-                add_includedirs "${dir}/include"
-                break
-            fi
-        done
+        cflags=`pkg-config --cflags libtbox 2>/dev/null`
+        ldflags=`pkg-config --libs libtbox 2>/dev/null`
+        if test_z "${cflags}"; then
+            cflags="-I/usr/include"
+        fi
+        if test_z "${ldflags}"; then
+            ldflags="-ltbox"
+        fi
+        add_cflags "${cflags}"
+        add_ldflags "${ldflags}"
     option_end
 }
 
 # add projects
-if ! has_config "lua"; then
+if ! has_config "external"; then
     if is_config "runtime" "luajit"; then
         includes "src/luajit"
     else
         includes "src/lua"
     fi
-fi
-if ! has_config "lua_cjson"; then
     includes "src/lua-cjson"
-fi
-if ! has_config "lz4"; then
     includes "src/lz4"
-fi
-if ! has_config "sv"; then
     includes "src/sv"
-fi
-if ! has_config "tbox"; then
     includes "src/tbox"
 fi
 includes "src/xmake"
 includes "src/demo"
-
