@@ -37,14 +37,17 @@ rule("cuda.build.devlink")
         import("utils.progress")
 
         -- disable devlink?
-        local devlink = target:values("cuda.build.devlink")
+        --
+        -- @note cuda.build.devlink value will be deprecated
+        --
+        local devlink = target:policy("build.cuda.devlink") or target:values("cuda.build.devlink")
         if devlink == false then
             return
         end
 
-        -- only for binary/shared on non-windows platforms
+        -- only for binary/shared by default
         -- https://github.com/xmake-io/xmake/issues/1976
-        if not (devlink == true or target:is_plat("windows") or target:is_binary() or target:is_shared()) then
+        if not (devlink == true or target:is_binary() or target:is_shared()) then
             return
         end
 

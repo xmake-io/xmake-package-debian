@@ -109,6 +109,11 @@ function _instance:extraconf_set(name, item, key, value)
     return self._INFO:extraconf_set(name, item, key, value)
 end
 
+-- get configuration source information of the given api item
+function _instance:sourceinfo(name, item)
+    return self._INFO:sourceinfo(name, item)
+end
+
 -- get the package license
 function _instance:license()
     return self:get("license")
@@ -269,6 +274,11 @@ function _instance:url_excludes(url)
     return self:extraconf("urls", url, "excludes")
 end
 
+-- get the http headers of url, @note need raw url
+function _instance:url_http_headers(url)
+    return self:extraconf("urls", url, "http_headers")
+end
+
 -- set artifacts info
 function _instance:artifacts_set(artifacts_info)
     local versions = self:get("versions")
@@ -336,7 +346,7 @@ function _instance:is_precompiled()
 end
 
 -- fallback to source code build
-function _instance:fackback_build()
+function _instance:fallback_build()
     if self:is_precompiled() then
         local artifacts_backup = self._ARTIFACTS_BACKUP
         if artifacts_backup then
@@ -614,8 +624,15 @@ end
 -- is cross-compilation?
 function _instance:is_cross()
     if os.host() == "windows" then
-        if self:is_plat("windows") and
-            self:is_arch(os.arch()) then -- maybe cross-compilation for arm64 on x86/x64
+        local host_arch = os.arch()
+        if self:is_plat("windows") then
+            -- maybe cross-compilation for arm64 on x86/x64
+            if (host_arch == "x86" or host_arch == "x64") and self:is_arch("arm64") then
+                return true
+            -- maybe cross-compilation for x86/64 on arm64
+            elseif host_arch == "arm64" and not self:is_arch("arm64") then
+                return true
+            end
             return false
         elseif self:is_plat("mingw") then
             return false
@@ -1701,6 +1718,16 @@ function _instance:fetch(opt)
 
     -- save to cache
     self._FETCHINFO = fetchinfo
+
+    -- we need update the real version if it's system package
+    -- @see https://github.com/xmake-io/xmake/issues/3333
+    if is_system and fetchinfo and fetchinfo.version then
+        local fetch_version = semver.new(fetchinfo.version)
+        if fetch_version then
+            self._VERSION = fetch_version
+            self._VERSION_STR = fetchinfo.version
+        end
+    end
 
     -- mark as system package?
     if is_system ~= nil then

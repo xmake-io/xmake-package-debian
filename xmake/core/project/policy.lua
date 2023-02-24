@@ -33,8 +33,7 @@ local string  = require("base/string")
 function policy.policies()
     local policies = policy._POLICIES
     if not policies then
-        policies =
-        {
+        policies = {
             -- we will check and ignore all unsupported flags by default, but we can also pass `{force = true}` to force to set flags, e.g. add_ldflags("-static", {force = true})
             ["check.auto_ignore_flags"]           = {description = "Enable check and ignore unsupported flags automatically.", default = true, type = "boolean"},
             -- we will map gcc flags to the current compiler and linker by default.
@@ -61,6 +60,8 @@ function policy.policies()
             ["build.c++.msvc.fallbackscanner"]    = {description = "Force msvc fallback module dependency scanner.", default = false, type = "boolean"},
             -- force C++ modules fallback dependency scanner for gcc
             ["build.c++.gcc.fallbackscanner"]     = {description = "Force gcc fallback module dependency scanner.", default = false, type = "boolean"},
+            -- enable cuda device link
+            ["build.cuda.devlink"]                = {description = "Enable Cuda devlink.", type = "boolean"},
             -- preprocessor configuration for ccache/distcc, we can disable linemarkers to speed up preprocess
             ["preprocessor.linemarkers"]          = {description = "Enable linemarkers for preprocessor.", default = true, type = "boolean"},
             -- preprocessor configuration for ccache/distcc, we can disable it to avoid cache object file with __DATE__, __TIME__
@@ -77,6 +78,8 @@ function policy.policies()
             ["package.install_only"]              = {description = "Only install packages from remote.", type = "boolean"},
             -- always install packages every time
             ["package.install_always"]            = {description = "Always install packages every time.", type = "boolean"},
+            -- set custom headers when downloading package
+            ["package.download.http_headers"]     = {description = "Set the custom http headers when downloading package."},
             -- use includes as external header files? e.g. -isystem ..
             ["package.include_external_headers"]  = {description = "Use includes as external headers.", type = "boolean"},
             -- inherit the configs from the external command arguments, e.g. toolchains, `xmake f --toolchain=`

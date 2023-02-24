@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set_project "xmake"
-set_version "2.7.6" "%Y%m%d"
+set_version "2.7.7" "%Y%m%d"
 
 # set warning all
 set_warnings "all"
@@ -25,7 +25,8 @@ else
     set_strip "all"
     set_symbols "hidden"
     set_optimizes "smallest"
-    if is_plat "macosx"; then
+    # we cannot enable LTO on macOS arm64
+    if is_plat "macosx" && ! is_arch "arm64"; then
         add_cxflags "-flto"
         add_mxflags "-flto"
         add_ldflags "-flto"

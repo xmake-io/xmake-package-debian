@@ -111,6 +111,13 @@ function main(requires_raw)
 
         -- show urls
         local urls = instance:urls()
+        if instance:is_precompiled() then
+            instance:fallback_build()
+            local urls_raw = instance:urls()
+            if urls_raw then
+                urls = table.join(urls, urls_raw)
+            end
+        end
         if urls and #urls > 0 then
             cprint("      -> ${color.dump.string_quote}urls${clear}:")
             for _, url in ipairs(urls) do
@@ -152,20 +159,29 @@ function main(requires_raw)
         -- show search directories and search names
         cprint("      -> ${color.dump.string_quote}searchdirs${clear}: %s", table.concat(table.wrap(core_package.searchdirs()), path.envsep()))
         local searchnames = hashset.new()
-        for _, url in ipairs(instance:urls()) do
+        for _, url in ipairs(urls) do
             url = filter.handle(url, instance)
             if git.checkurl(url) then
-                searchnames:insert(instance:name() .. archive.extension(url))
-                searchnames:insert(path.basename(url_filename(url)))
+                searchnames:insert(instance:name() .. archive.extension(url) .. " ${dim}(git)${clear}")
+                searchnames:insert(path.basename(url_filename(url)) .. " ${dim}(git)${clear}")
             else
                 local extension = archive.extension(url)
                 if extension then
                     searchnames:insert(instance:name() .. "-" .. instance:version_str() .. extension)
                 end
                 searchnames:insert(url_filename(url))
+
+                -- match github name mangling https://github.com/xmake-io/xmake/issues/1343
+                local github_name = url_filename.github_filename(url)
+                if github_name then
+                    searchnames:insert(github_name)
+                end
             end
         end
-        cprint("      -> ${color.dump.string_quote}searchnames${clear}: %s", table.concat(searchnames:to_array(), ", "))
+        cprint("      -> ${color.dump.string_quote}searchnames${clear}:")
+        for _, searchname in searchnames:keys() do
+            cprint("         -> %s", searchname)
+        end
 
         -- show fetch info
         cprint("      -> ${color.dump.string_quote}fetchinfo${clear}: %s", _info(instance))

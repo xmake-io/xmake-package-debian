@@ -239,6 +239,7 @@ The test project: [xmake-core](https://github.com/xmake-io/xmake/tree/master/cor
 * MinGW (i386, x86_64, arm, arm64)
 * Cygwin (i386, x86_64)
 * Wasm (wasm32)
+* Haiku (i386, x86_64)
 * Cross (cross-toolchains ..)
 
 ## Supported toolchains
@@ -251,7 +252,10 @@ clang-cl      LLVM Clang C/C++ Compiler compatible with msvc
 yasm          The Yasm Modular Assembler
 clang         A C language family frontend for LLVM
 go            Go Programming Language Compiler
-dlang         D Programming Language Compiler
+dlang         D Programming Language Compiler (Auto)
+dmd           D Programming Language Compiler
+ldc           The LLVM-based D Compiler
+gdc           The GNU D Compiler (GDC)
 gfortran      GNU Fortran Programming Language Compiler
 zig           Zig Programming Language Compiler
 sdcc          Small Device C Compiler
@@ -325,22 +329,24 @@ verilator     Verilator open-source SystemVerilog simulator and lint system
 
 ## Supported Projects
 
-* Static Library
-* Shared Library
+* Static library
+* Shared library
 * Console
-* Cuda Program
-* Qt Application
-* WDK Driver (umdf/kmdf/wdm)
-* WinSDK Application
-* MFC Application
-* iOS/MacOS Application (Support .metal)
-* Framework and Bundle Program (iOS/MacOS)
-* SWIG Modules (Lua, python, ...)
-* Luarocks Modules
-* Protobuf Program
-* Lex/yacc program
-* C++20 Modules
-* Linux Kernel Driver Modules
+* Cuda program
+* Qt application
+* WDK driver (umdf/kmdf/wdm)
+* WinSDK application
+* MFC application
+* iOS/MacOS application (support .metal)
+* Framework and bundle program (iOS/MacOS)
+* SWIG/Pybind11 modules (lua, python, ...)
+* Luarocks modules
+* Protobuf program
+* Lex/yacc Program
+* C++20 modules
+* Linux kernel driver modules
+* Keil MDK/C51 embed program
+* Verilog simulator program
 
 ## Distributed Compilation
 

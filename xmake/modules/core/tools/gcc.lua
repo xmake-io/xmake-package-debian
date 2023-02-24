@@ -83,7 +83,7 @@ function nf_strip(self, level, target)
     ,   all   = "-s"
     }
     if self:is_plat("macosx", "iphoneos") then
-        maps.all = "-Wl,-x"
+        maps.all = {"-Wl,-x", "-Wl,-dead_strip"}
     end
     return maps[level]
 end
@@ -181,6 +181,8 @@ function nf_language(self, stdname)
             ansi        = "-ansi"
         ,   c89         = "-std=c89"
         ,   gnu89       = "-std=gnu89"
+        ,   c90         = "-std=c90"
+        ,   gnu90       = "-std=gnu90"
         ,   c99         = "-std=c99"
         ,   gnu99       = "-std=gnu99"
         ,   c11         = "-std=c11"

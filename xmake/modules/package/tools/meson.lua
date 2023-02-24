@@ -24,8 +24,8 @@ import("core.project.config")
 import("core.tool.toolchain")
 import("core.tool.linker")
 import("core.tool.compiler")
-import("package.tools.ninja")
 import("lib.detect.find_tool")
+import("private.utils.executable_path")
 
 -- get build directory
 function _get_buildir(package, opt)
@@ -47,17 +47,6 @@ function _map_linkflags(package, targetkind, sourcekinds, name, values)
     return linker.map_flags(targetkind, sourcekinds, name, values, {target = package})
 end
 
--- is cross compilation?
-function _is_cross_compilation(package)
-    if not package:is_plat(os.subhost()) then
-        return true
-    end
-    if package:is_plat("macosx") and not package:is_arch(os.subarch()) then
-        return true
-    end
-    return false
-end
-
 -- get pkg-config
 function _get_pkgconfig(package)
     if package:is_plat("windows") then
@@ -72,6 +61,22 @@ function _get_pkgconfig(package)
     end
 end
 
+-- translate flags
+function _translate_flags(package, flags)
+    if package:is_plat("android") then
+        local flags_new = {}
+        for _, flag in ipairs(flags) do
+            if flag:startswith("-gcc-toolchain ") or flag:startswith("-target ") or flag:startswith("-isystem ") then
+                table.join2(flags_new, flag:split(" ", {limit = 2}))
+            else
+                table.insert(flags_new, flag)
+            end
+        end
+        flags = flags_new
+    end
+    return flags
+end
+
 -- get cross file
 function _get_cross_file(package, opt)
     opt = opt or {}
@@ -82,42 +87,44 @@ function _get_cross_file(package, opt)
         file:print("[binaries]")
         local cc = package:build_getenv("cc")
         if cc then
-            -- we need split it, maybe is `xcrun -sdk iphoneos clang`
-            file:print("c=['%s']", table.concat(os.argv(cc), "', '"))
+            file:print("c=['%s']", executable_path(cc))
         end
         local cxx = package:build_getenv("cxx")
         if cxx then
-            file:print("cpp=['%s']", table.concat(os.argv(cxx), "', '"))
+            file:print("cpp=['%s']", executable_path(cxx))
         end
         local ld = package:build_getenv("ld")
         if ld then
-            file:print("ld=['%s']", table.concat(os.argv(ld), "', '"))
+            file:print("ld=['%s']", executable_path(ld))
         end
-        local ar = package:build_getenv("ar")
-        if ar then
-            file:print("ar=['%s']", table.concat(os.argv(ar), "', '"))
+        -- we cannot pass link.exe to ar for msvc, it will raise `unknown linker`
+        if not package:is_plat("windows") then
+            local ar = package:build_getenv("ar")
+            if ar then
+                file:print("ar=['%s']", executable_path(ar))
+            end
         end
         local strip = package:build_getenv("strip")
         if strip then
-            file:print("strip='%s'", strip)
+            file:print("strip=['%s']", executable_path(strip))
         end
         local ranlib = package:build_getenv("ranlib")
         if ranlib then
-            file:print("ranlib='%s'", ranlib)
+            file:print("ranlib=['%s']", executable_path(ranlib))
         end
         if package:is_plat("mingw") then
             local mrc = package:build_getenv("mrc")
             if mrc then
-                file:print("windres='%s'", mrc)
+                file:print("windres=['%s']", executable_path(mrc))
             end
         end
         local cmake = find_tool("cmake")
         if cmake then
-            file:print("cmake='%s'", cmake.program)
+            file:print("cmake=['%s']", executable_path(cmake.program))
         end
         local pkgconfig = _get_pkgconfig(package)
         if pkgconfig then
-            file:print("pkgconfig='%s'", pkgconfig)
+            file:print("pkgconfig=['%s']", executable_path(pkgconfig))
         end
         file:print("")
 
@@ -141,13 +148,16 @@ function _get_cross_file(package, opt)
         table.join2(ldflags,  _get_ldflags_from_packagedeps(package, opt))
         table.join2(shflags,  _get_ldflags_from_packagedeps(package, opt))
         if #cflags > 0 then
+            cflags = _translate_flags(package, cflags)
             file:print("c_args=['%s']", table.concat(cflags, "', '"))
         end
         if #cxxflags > 0 then
+            cxxflags = _translate_flags(package, cxxflags)
             file:print("cpp_args=['%s']", table.concat(cxxflags, "', '"))
         end
         local linkflags = table.join(ldflags or {}, shflags)
         if #linkflags > 0 then
+            linkflags = _translate_flags(package, linkflags)
             file:print("c_link_args=['%s']", table.concat(linkflags, "', '"))
             file:print("cpp_link_args=['%s']", table.concat(linkflags, "', '"))
         end
@@ -180,8 +190,27 @@ function _get_cross_file(package, opt)
             file:print("cpu = '%s'", cpu)
             file:print("endian = 'little'")
         elseif package:is_plat("android") then
-            -- TODO
-            raise("android has been not supported now!")
+            local cpu
+            local cpu_family
+            if package:is_arch("arm64-v8a") then
+                cpu = "aarch64"
+                cpu_family = "aarch64"
+            elseif package:is_arch("armeabi-v7a") then
+                cpu = "arm"
+                cpu_family = "arm"
+            elseif package:is_arch("x64", "x86_64") then
+                cpu = "x86_64"
+                cpu_family = "x86_64"
+            elseif package:is_arch("x86", "i386") then
+                cpu = "i686"
+                cpu_family = "x86"
+            else
+                raise("unsupported arch(%s)", package:arch())
+            end
+            file:print("system = 'android'")
+            file:print("cpu_family = '%s'", cpu_family)
+            file:print("cpu = '%s'", cpu)
+            file:print("endian = 'little'")
         elseif package:is_plat("mingw") then
             local cpu
             local cpu_family
@@ -191,6 +220,25 @@ function _get_cross_file(package, opt)
             elseif package:is_arch("x86", "i386") then
                 cpu = "i686"
                 cpu_family = "x86"
+            else
+                raise("unsupported arch(%s)", package:arch())
+            end
+            file:print("system = 'windows'")
+            file:print("cpu_family = '%s'", cpu_family)
+            file:print("cpu = '%s'", cpu)
+            file:print("endian = 'little'")
+        elseif package:is_plat("windows") then
+            local cpu
+            local cpu_family
+            if package:is_arch("arm64") then
+                cpu = "aarch64"
+                cpu_family = "aarch64"
+            elseif package:is_arch("x86") then
+                cpu = "x86"
+                cpu_family = "x86"
+            elseif package:is_arch("x64") then
+                cpu = "x86_64"
+                cpu_family = "x86_64"
             else
                 raise("unsupported arch(%s)", package:arch())
             end
@@ -250,7 +298,7 @@ function _get_configs(package, configs, opt)
     end
 
     -- add cross file
-    if _is_cross_compilation(package) then
+    if package:is_cross() then
         table.insert(configs, "--cross-file=" .. _get_cross_file(package, opt))
     end
 
@@ -282,7 +330,7 @@ end
 function _get_cflags_from_packagedeps(package, opt)
     local result = {}
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = package:dep(depname)
+        local dep = type(depname) == "string" and package:dep(depname) or depname
         if dep then
             local fetchinfo = dep:fetch({external = false})
             if fetchinfo then
@@ -299,7 +347,7 @@ end
 function _get_ldflags_from_packagedeps(package, opt)
     local result = {}
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = package:dep(depname)
+        local dep = type(depname) == "string" and package:dep(depname) or depname
         if dep then
             local fetchinfo = dep:fetch({external = false})
             if fetchinfo then
@@ -374,7 +422,8 @@ function generate(package, configs, opt)
     opt = opt or {}
 
     -- pass configurations
-    local argv = {}
+    -- TODO: support more backends https://mesonbuild.com/Commands.html#setup
+    local argv = {"setup"}
     for name, value in pairs(_get_configs(package, configs, opt)) do
         value = tostring(value):trim()
         if value ~= "" then
@@ -387,7 +436,8 @@ function generate(package, configs, opt)
     end
 
     -- do configure
-    os.vrunv("meson", argv, {envs = opt.envs or buildenvs(package, opt)})
+    local meson = assert(find_tool("meson"), "meson not found!")
+    os.vrunv(meson.program, argv, {envs = opt.envs or buildenvs(package, opt)})
 end
 
 -- build package
@@ -397,9 +447,19 @@ function build(package, configs, opt)
     opt = opt or {}
     generate(package, configs, opt)
 
-    -- do build
+    -- configurate build
     local buildir = _get_buildir(package, opt)
-    ninja.build(package, {}, {buildir = buildir, envs = opt.envs or buildenvs(package, opt)})
+    local njob = opt.jobs or option.get("jobs") or tostring(os.default_njob())
+    local argv = {"compile", "-C", buildir}
+    if option.get("diagnosis") then
+        table.insert(argv, "-v")
+    end
+    table.insert(argv, "-j")
+    table.insert(argv, njob)
+
+    -- do build
+    local meson = assert(find_tool("meson"), "meson not found!")
+    os.vrunv(meson.program, argv, {envs = opt.envs or buildenvs(package, opt)})
 end
 
 -- install package
@@ -409,9 +469,16 @@ function install(package, configs, opt)
     opt = opt or {}
     generate(package, configs, opt)
 
-    -- do build and install
+    -- configure install
     local buildir = _get_buildir(package, opt)
-    ninja.install(package, {}, {buildir = buildir, envs = opt.envs or buildenvs(package, opt)})
+    local argv = {"install", "-C", buildir}
+    if option.get("verbose") then
+        table.insert(argv, "-v")
+    end
+
+    -- do build and install
+    local meson = assert(find_tool("meson"), "meson not found!")
+    os.vrunv(meson.program, {"install", "-C", buildir}, {envs = opt.envs or buildenvs(package, opt)})
 
     -- fix static libname on windows
     if package:is_plat("windows") and not package:config("shared") then

@@ -248,6 +248,7 @@ $ xmake f --menu
 * MinGW (i386, x86_64, arm, arm64)
 * Cygwin (i386, x86_64)
 * Wasm (wasm32)
+* Haiku (i386, x86_64)
 * Cross (cross-toolchains ..)
 
 ## 支持工具链
@@ -260,7 +261,10 @@ clang-cl      LLVM Clang C/C++ Compiler compatible with msvc
 yasm          The Yasm Modular Assembler
 clang         A C language family frontend for LLVM
 go            Go Programming Language Compiler
-dlang         D Programming Language Compiler
+dlang         D Programming Language Compiler (Auto)
+dmd           D Programming Language Compiler
+ldc           The LLVM-based D Compiler
+gdc           The GNU D Compiler (GDC)
 gfortran      GNU Fortran Programming Language Compiler
 zig           Zig Programming Language Compiler
 sdcc          Small Device C Compiler
@@ -343,12 +347,14 @@ verilator     Verilator open-source SystemVerilog simulator and lint system
 * MFC 应用程序
 * iOS/MacOS 应用程序（支持.metal）
 * Framework和Bundle程序（iOS/MacOS）
-* SWIG 模块 (Lua, python, ...)
+* SWIG/Pybind11 模块 (Lua, python, ...)
 * Luarocks 模块
 * Protobuf 程序
 * Lex/yacc 程序
 * C++20 模块
 * Linux 内核驱动模块
+* Keil MDK/C51 嵌入式程序
+* Verilog 仿真程序
 
 ## 分布式编译和缓存
 

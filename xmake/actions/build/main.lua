@@ -32,6 +32,7 @@ import("build")
 import("build_files")
 import("cleaner")
 import("statistics")
+import("check", {alias = "check_targets"})
 import("private.cache.build_cache")
 import("private.service.remote_build.action", {alias = "remote_build_action"})
 
@@ -40,7 +41,7 @@ function _do_try_build(configfile, tool, trybuild, trybuild_detected, targetname
     if configfile and tool and (trybuild or utils.confirm({default = true,
             description = "${bright}" .. path.filename(configfile) .. "${clear} found, try building it or you can run `${bright}xmake f --trybuild=${clear}` to set buildsystem"})) then
         if not trybuild then
-            task.run("config", {target = targetname, trybuild = trybuild_detected})
+            task.run("config", {trybuild = trybuild_detected})
         end
         tool.build()
         return true
@@ -109,6 +110,25 @@ function _do_build(targetname, group_pattern)
     end
 end
 
+-- on exit
+function _on_exit(ok, errors)
+
+    -- since we call it in both os.atexit and catch block,
+    -- we need to avoid duplicate execution.
+    local handled = false
+    local exited = _g.exited
+    if not exited then
+        exited = true
+        handled = true
+        _g.exited = exited
+    end
+
+    -- we just handle the build failure
+    if handled and not ok then
+        check_targets(targetname, {build_failure = true})
+    end
+end
+
 -- main
 function main()
 
@@ -136,7 +156,7 @@ function main()
     else
         targetname = option.get("target")
     end
-    task.run("config", {target = targetname}, {disable_dump = true})
+    task.run("config", {}, {disable_dump = true})
 
     -- enter project directory
     local oldir = os.cd(project.directory())
@@ -144,9 +164,15 @@ function main()
     -- clean up temporary files once a day
     cleaner.cleanup()
 
+    -- register exit callbacks
+    os.atexit(_on_exit)
+
     try
     {
         function ()
+
+            -- do check
+            check_targets(targetname, {build = true})
 
             -- do rules before building
             _do_project_rules("build_before")
@@ -162,6 +188,10 @@ function main()
         catch
         {
             function (errors)
+
+                -- maybe it's unreachable when building fails, so we need also os.atexit()
+                -- @see https://github.com/xmake-io/xmake/issues/3401
+                _on_exit(false, errors)
 
                 -- do rules after building
                 _do_project_rules("build_after", {errors = errors})

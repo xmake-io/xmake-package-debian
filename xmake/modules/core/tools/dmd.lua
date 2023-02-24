@@ -48,10 +48,10 @@ function nf_optimize(self, level)
         local maps =
         {
             fast        = "-O"
-        ,   faster      = "-O -release"
-        ,   fastest     = "-O -release -inline -boundscheck=off"
-        ,   smallest    = "-O -release -boundscheck=off"
-        ,   aggressive  = "-O -release -inline -boundscheck=off"
+        ,   faster      = {"-O", "-release"}
+        ,   fastest     = {"-O", "-release", "-inline", "-boundscheck=off"}
+        ,   smallest    = {"-O", "-release", "-boundscheck=off"}
+        ,   aggressive  = {"-O", "-release", "-inline", "-boundscheck=off"}
         }
         return maps[level]
     end
@@ -64,16 +64,26 @@ function nf_strip(self, level)
             debug = "-L-S",
             all   = "-L-s"
         }
+        if self:is_plat("macosx", "iphoneos") then
+            maps.all = {"-L-x", "-L-dead_strip"}
+        end
         return maps[level]
     end
 end
 
 -- make the symbol flag
 function nf_symbol(self, level)
-    local maps = {
-        debug = "-g -debug"
-    }
-    return maps[level]
+    local kind = self:kind()
+    if language.sourcekinds()[kind] then
+        local maps = _g.symbol_maps
+        if not maps then
+            maps = {
+                debug  = {"-g", "-debug"}
+            }
+            _g.symbol_maps = maps
+        end
+        return maps[level .. '_' .. kind] or maps[level]
+    end
 end
 
 -- make the warning flag

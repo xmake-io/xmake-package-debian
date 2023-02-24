@@ -488,6 +488,11 @@ function _instance:extraconf_set(name, item, key, value)
     self._INFO:extraconf_set(name, item, key, value)
 end
 
+-- get configuration source information of the given api item
+function _instance:sourceinfo(name, item)
+    return self._INFO:sourceinfo(name, item)
+end
+
 -- get user private data
 function _instance:data(name)
     return self._DATA and self._DATA[name]
@@ -775,11 +780,7 @@ function _instance:orderules()
     local rules = self._RULES
     local orderules = self._ORDERULES
     if orderules == nil and rules then
-        orderules = {}
-        local rulerefs = {}
-        for _, r in table.orderpairs(rules) do
-            instance_deps.sort_deps(rules, orderules, rulerefs, r)
-        end
+        orderules = instance_deps.sort(rules)
         self._ORDERULES = orderules
     end
     return orderules
@@ -1379,8 +1380,8 @@ function _instance:fileconfig(sourcefile)
             -- match source files
             local results = os.match(filepath)
             if #results == 0 and not fileconfig.always_added then
-                local sourceinfo = (self:get("__sourceinfo_files") or {})[filepath] or {}
-                utils.warning("cannot match %s(%s).add_files(\"%s\") at %s:%d", self:type(), self:name(), filepath, sourceinfo.file or "", sourceinfo.line or -1)
+                local sourceinfo = self:sourceinfo("files", filepath) or {}
+                utils.warning("%s:%d${clear}: cannot match add_files(\"%s\") in %s(%s)", sourceinfo.file or "", sourceinfo.line or -1, filepath, self:type(), self:name())
             end
 
             -- process source files
@@ -1503,8 +1504,8 @@ function _instance:sourcefiles()
             targetcache:set2("sourcefiles", file, results)
         end
         if #results == 0 then
-            local sourceinfo = (self:get("__sourceinfo_files") or {})[file] or {}
-            utils.warning("cannot match %s(%s).%s_files(\"%s\") at %s:%d", self:type(), self:name(), (removed and "remove" or "add"), file, sourceinfo.file or "", sourceinfo.line or -1)
+            local sourceinfo = self:sourceinfo("files", file) or {}
+            utils.warning("%s:%d${clear}: cannot match %s_files(\"%s\") in %s(%s)", sourceinfo.file or "", sourceinfo.line or -1, (removed and "remove" or "add"), file, self:type(), self:name())
         end
 
         -- process source files

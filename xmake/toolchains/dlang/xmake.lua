@@ -20,30 +20,18 @@
 
 -- define toolchain
 toolchain("dlang")
-
-    -- set homepage
     set_homepage("https://dlang.org/")
-    set_description("D Programming Language Compiler")
+    set_description("D Programming Language Compiler (Auto)")
 
-    -- check toolchain
     on_check("check")
 
-    -- on load
     on_load(function (toolchain)
-
-        -- imports
-        import("core.project.config")
-
-        -- get cross prefix
         local cross = toolchain:cross() or ""
-
-        -- set toolset
         toolchain:add("toolset", "dc",   "$(env DC)", "dmd", "ldc2", cross .. "gdc")
         toolchain:add("toolset", "dcld", "$(env DC)", "dmd", "ldc2", cross .. "gdc")
         toolchain:add("toolset", "dcsh", "$(env DC)", "dmd", "ldc2", cross .. "gdc")
         toolchain:add("toolset", "dcar", "$(env DC)", "dmd", "ldc2", cross .. "gcc-ar")
 
-        -- init flags
         local march
         if toolchain:is_arch("x86_64", "x64") then
             march = "-m64"

@@ -155,24 +155,14 @@ function os._rm(filedir)
 end
 
 -- get the ramdisk root directory
+-- https://github.com/xmake-io/xmake/issues/3408
 function os._ramdir()
-
-    -- get root ramdir
     local ramdir_root = os._ROOT_RAMDIR
     if ramdir_root == nil then
         ramdir_root = os.getenv("XMAKE_RAMDIR")
     end
     if ramdir_root == nil then
-        if os.host() == "linux" and os.isdir("/dev/shm") then
-            ramdir_root = "/dev/shm"
-        elseif os.host() == "macosx" and os.isdir("/Volumes/RAM") then
-            -- @note we need the user to execute the command to create it.
-            -- diskutil partitionDisk `hdiutil attach -nomount ram://8388608` GPT APFS "RAM" 0
-            ramdir_root = "/Volumes/RAM"
-        end
-        if ramdir_root == nil then
-            ramdir_root = false
-        end
+        ramdir_root = false
         os._ROOT_RAMDIR = ramdir_root
     end
     return ramdir_root or nil
@@ -268,6 +258,16 @@ function os._is_tracing_process()
         os._IS_TRACING_PROCESS = is_tracing
     end
     return is_tracing
+end
+
+-- run all exit callback
+function os._run_exit_cbs(ok, errors)
+    local exit_callbacks = os._EXIT_CALLBACKS
+    if exit_callbacks then
+        for _, cb in ipairs(exit_callbacks) do
+            cb(ok, errors)
+        end
+    end
 end
 
 -- match files or directories
@@ -650,9 +650,23 @@ end
 
 -- exit program
 function os.exit(...)
-
-    -- do exit
     return os._exit(...)
+end
+
+-- register exit callback
+--
+-- e.g.
+-- os.atexit(function (ok, errors)
+--     print(ok, errors)
+-- end)
+--
+function os.atexit(on_exit)
+    local exit_callbacks = os._EXIT_CALLBACKS
+    if exit_callbacks == nil then
+        exit_callbacks = {}
+        os._EXIT_CALLBACKS = exit_callbacks
+    end
+    table.insert(exit_callbacks, on_exit)
 end
 
 -- run command

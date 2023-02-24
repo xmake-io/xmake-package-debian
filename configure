@@ -412,6 +412,10 @@ path_toolname() {
         *-ar) toolname="ar";;
         */ar) toolname="ar";;
         ar) toolname="ar";;
+        cc) toolname="gcc";;
+        */cc) toolname="gcc";;
+        c++) toolname="gxx";;
+        */c++) toolname="gxx";;
         *) raise "unknown tool ${1}";;
     esac
     _ret="${toolname}"
@@ -600,6 +604,9 @@ fi
 if echo "${os_host}" | grep bsd >/dev/null 2>&1; then
     os_host="bsd"
 fi
+if echo "${os_host}" | grep Haiku >/dev/null 2>&1; then
+    os_host="haiku"
+fi
 
 # determining host
 # e.g.
@@ -620,6 +627,10 @@ is_host() {
 os_arch=`uname -m | tr '[A-Z]' '[a-z]'`
 if test_eq "${os_arch}" "i686"; then
     os_arch="i386"
+elif test_eq "${os_arch}" "aarch64"; then
+    os_arch="arm64"
+elif string_contains "${os_arch}" "armv7"; then
+    os_arch="armv7"
 fi
 
 # set the default target platform
@@ -639,6 +650,10 @@ elif test_nz "${TERMUX_ARCH}"; then
 fi
 if test_eq "${_target_arch_default}" "i686"; then
     _target_arch_default="i386"
+elif test_eq "${_target_arch_default}" "aarch64"; then
+    _target_arch_default="arm64"
+elif string_contains "${_target_arch_default}" "armv7"; then
+    _target_arch_default="armv7"
 fi
 
 # set the default target mode
@@ -813,7 +828,7 @@ _get_abstract_flag_for_gcc_clang() {
                 flag="-Wl,-S"
             elif test_eq "${value}" "all"; then
                 if is_plat "macosx"; then
-                    flag="-Wl,-x"
+                    flag="-Wl,-x -Wl,-dead_strip"
                 else
                     flag="-s"
                 fi

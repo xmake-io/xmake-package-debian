@@ -28,14 +28,15 @@ import("core.package.package", {alias = "core_package"})
 import("lib.detect.find_file")
 import("lib.detect.find_directory")
 import("private.action.require.impl.utils.filter")
-import("private.action.require.impl..utils.url_filename")
+import("private.action.require.impl.utils.url_filename")
 import("net.http")
 import("net.proxy")
 import("devel.git")
 import("utils.archive")
 
 -- checkout codes from git
-function _checkout(package, url, sourcedir, url_alias)
+function _checkout(package, url, sourcedir, opt)
+    opt = opt or {}
 
     -- use previous source directory if exists
     local packagedir = path.join(sourcedir, package:name())
@@ -104,7 +105,7 @@ function _checkout(package, url, sourcedir, url_alias)
         git.clone(url, {longpaths = longpaths, outputdir = packagedir})
 
         -- attempt to checkout the given version
-        local revision = package:revision(url_alias) or package:tag() or package:commit() or package:version_str()
+        local revision = package:revision(opt.url_alias) or package:tag() or package:commit() or package:version_str()
         git.checkout(revision, {repodir = packagedir})
 
         -- update all submodules
@@ -123,7 +124,8 @@ function _checkout(package, url, sourcedir, url_alias)
 end
 
 -- download codes from ftp/http/https
-function _download(package, url, sourcedir, url_alias, url_excludes)
+function _download(package, url, sourcedir, opt)
+    opt = opt or {}
 
     -- get package file
     local packagefile = url_filename(url)
@@ -134,7 +136,7 @@ function _download(package, url, sourcedir, url_alias, url_excludes)
     -- @see https://github.com/xmake-io/xmake/issues/930
     -- https://github.com/xmake-io/xmake/issues/1009
     --
-    local sourcehash = package:sourcehash(url_alias)
+    local sourcehash = package:sourcehash(opt.url_alias)
     assert(not package:is_verify() or not package:get("versions") or sourcehash, "cannot get source hash of %s in package(%s)", url, package:name())
 
     -- the package file have been downloaded?
@@ -154,6 +156,13 @@ function _download(package, url, sourcedir, url_alias, url_excludes)
             local localfile
             local searchnames = {package:name() .. "-" .. package:version_str() .. archive.extension(url),
                                  packagefile}
+
+            -- match github name mangling https://github.com/xmake-io/xmake/issues/1343
+            local github_name = url_filename.github_filename(url)
+            if github_name then
+                table.insert(searchnames, github_name)
+            end
+
             for _, searchname in ipairs(searchnames) do
                 localfile = find_file(searchname, core_package.searchdirs())
                 if localfile then
@@ -164,7 +173,9 @@ function _download(package, url, sourcedir, url_alias, url_excludes)
                 -- we can use local package from the search directories directly if network is too slow
                 os.cp(localfile, packagefile)
             else
-                http.download(url, packagefile, {insecure = global.get("insecure-ssl")})
+                http.download(url, packagefile, {
+                    insecure = global.get("insecure-ssl"),
+                    headers = opt.url_http_headers or package:policy("package.download.http_headers")})
             end
         end
 
@@ -181,7 +192,7 @@ function _download(package, url, sourcedir, url_alias, url_excludes)
     local sourcedir_tmp = sourcedir .. ".tmp"
     os.rm(sourcedir_tmp)
     local extension = archive.extension(packagefile)
-    if archive.extract(packagefile, sourcedir_tmp, {excludes = url_excludes}) then
+    if archive.extract(packagefile, sourcedir_tmp, {excludes = opt.url_excludes}) then
         -- move to source directory and we skip it to avoid long path issues on windows if only one root directory
         os.rm(sourcedir)
         local filedirs = os.filedirs(path.join(sourcedir_tmp, "*"))
@@ -193,6 +204,8 @@ function _download(package, url, sourcedir, url_alias, url_excludes)
         else
             os.mv(sourcedir_tmp, sourcedir)
         end
+        -- mark this sourcedir as cleanable
+        package:data_set("cleanable_sourcedir", path.absolute(sourcedir))
     elseif extension and extension ~= "" then
         -- create an empty source directory if do not extract package file
         os.tryrm(sourcedir)
@@ -212,6 +225,17 @@ function _download(package, url, sourcedir, url_alias, url_excludes)
     if not cached then
         cprint("${yellow}  => ${clear}download %s .. ${color.success}${text.success}", url)
     end
+end
+
+-- download codes from script
+function _download_from_script(package, script, opt)
+
+    -- do download
+    script(package, opt)
+
+    -- trace
+    tty.erase_line_to_start().cr()
+    cprint("${yellow}  => ${clear}download %s .. ${color.success}${text.success}", opt.url)
 end
 
 -- get sorted urls
@@ -256,12 +280,9 @@ function main(package)
     local ok = false
     local urls_failed = {}
     for idx, url in ipairs(urls) do
-
-        -- get url alias
         local url_alias = package:url_alias(url)
-
-        -- get url excludes
         local url_excludes = package:url_excludes(url)
+        local url_http_headers = package:url_http_headers(url)
 
         -- filter url
         url = filter.handle(url, package)
@@ -289,11 +310,19 @@ function main(package)
                 local sourcedir = "source"
                 local script = package:script("download")
                 if script then
-                    script(package, {sourcedir = sourcedir, url = url, url_alias = url_alias, url_excludes = url_excludes})
+                    _download_from_script(package, script, {
+                        sourcedir = sourcedir,
+                        url = url,
+                        url_alias = url_alias,
+                        url_excludes = url_excludes})
                 elseif git.checkurl(url) then
-                    _checkout(package, url, sourcedir, url_alias)
+                    _checkout(package, url, sourcedir, {
+                        url_alias = url_alias})
                 else
-                    _download(package, url, sourcedir, url_alias, url_excludes)
+                    _download(package, url, sourcedir, {
+                        url_alias = url_alias,
+                        url_excludes = url_excludes,
+                    url_http_headers = url_http_headers})
                 end
                 return true
             end,

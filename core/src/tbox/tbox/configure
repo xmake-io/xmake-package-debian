@@ -600,6 +600,9 @@ fi
 if echo "${os_host}" | grep bsd >/dev/null 2>&1; then
     os_host="bsd"
 fi
+if echo "${os_host}" | grep Haiku >/dev/null 2>&1; then
+    os_host="haiku"
+fi
 
 # determining host
 # e.g.
@@ -813,7 +816,7 @@ _get_abstract_flag_for_gcc_clang() {
                 flag="-Wl,-S"
             elif test_eq "${value}" "all"; then
                 if is_plat "macosx"; then
-                    flag="-Wl,-x"
+                    flag="-Wl,-x -Wl,-dead_strip"
                 else
                     flag="-s"
                 fi

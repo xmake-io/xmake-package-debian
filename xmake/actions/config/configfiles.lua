@@ -30,7 +30,7 @@ import("lib.detect.find_tool")
 -- get all configuration files
 function _get_configfiles()
     local configfiles = {}
-    for _, target in pairs(project.targets()) do
+    for _, target in table.orderpairs(project.targets()) do
         if target:is_enabled() then
 
             -- get configuration files for target
@@ -54,6 +54,12 @@ function _get_configfiles()
                 else
                     srcinfo.srcfile  = srcfile
                     srcinfo.fileinfo = fileinfo
+                end
+
+                -- we use first target to get dependfile path
+                -- @see https://github.com/xmake-io/xmake/issues/3321
+                if not srcinfo.dependfile then
+                    srcinfo.dependfile = target:dependfile(srcfile)
                 end
 
                 -- save targets
@@ -290,7 +296,11 @@ function _generate_configfile(srcfile, dstfile, fileinfo, targets)
                     os.cp(dstfile_tmp, dstfile)
                     generated = true
                 else
-                    os.touch(dstfile, {mtime = os.time()})
+                    -- I forget why I added it here, but if we switch the option, mode,
+                    -- this will cause the whole project to be rebuilt,
+                    -- even if nothing in config.h has been changed.
+                    --
+                    --os.touch(dstfile, {mtime = os.time()})
                 end
             else
                 os.cp(dstfile_tmp, dstfile)
@@ -317,6 +327,7 @@ function main(opt)
             _generate_configfile(srcinfo.srcfile, dstfile, srcinfo.fileinfo, srcinfo.targets)
         end, {files = srcinfo.srcfile,
               lastmtime = os.mtime(dstfile),
+              dependfile = srcinfo.dependfile,
               always_changed = opt.force})
     end
 
