@@ -96,7 +96,7 @@ function _get_configs(package, configs, opt)
             end
         end
     else
-        local names = {"ndk", "ndk_sdkver", "vs", "vs_toolset", "mingw", "ld", "sh", "ar", "cc", "cxx", "mm", "mxx"}
+        local names = {"sdk", "ndk", "ndk_sdkver", "vs", "vs_toolset", "mingw", "ld", "sh", "ar", "cc", "cxx", "mm", "mxx"}
         for _, name in ipairs(names) do
             local value = get_config(name)
             if value ~= nil then
@@ -104,6 +104,7 @@ function _get_configs(package, configs, opt)
             end
         end
     end
+
     local policies = get_config("policies")
     if package:config("lto") and (not policies or not policies:find("build.optimization.lto", 1, true)) then
         if policies then
@@ -240,6 +241,7 @@ function buildenvs(package, opt)
     local envs = _get_package_toolchains_envs(package, opt)
     -- we should avoid using $XMAKE_CONFIGDIR outside to cause conflicts
     envs.XMAKE_CONFIGDIR = os.curdir()
+    envs.XMAKE_IN_XREPO  = "1"
     return envs
 end
 

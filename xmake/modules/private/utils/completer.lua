@@ -129,14 +129,14 @@ function completer:_complete_option_kv_v(options, current, completing, name, val
     -- match values starts with value first
     local found_candidates = {}
     local nokey = self:config("nokey")
-    for _, v in ipairs(_find_candidates(values, value)) do
+    for _, v in ipairs(self:_find_candidates(values, value)) do
         if nokey then
             table.insert(found_candidates, { value = v, is_complete = true })
         else
             table.insert(found_candidates, { value = format("--%s=%s", name, v), is_complete = true })
         end
     end
-    completer:_print_candidates(found_candidates)
+    self:_print_candidates(found_candidates)
 
     -- whether any candidates has been found, finish complete since we don't have more info
     return true

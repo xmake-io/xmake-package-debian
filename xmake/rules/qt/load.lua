@@ -41,8 +41,8 @@ function _link(target, linkdirs, framework, qt_sdkver)
         else -- for qt4.x, e.g. QtGui4.lib
             if target:is_plat("windows", "mingw") then
                 framework = "Qt" .. framework:sub(3) .. (is_mode("debug") and debug_suffix or "") .. qt_sdkver:major()
-            else 
-                framework = "Qt" .. framework:sub(3) .. (is_mode("debug") and debug_suffix or "") 
+            else
+                framework = "Qt" .. framework:sub(3) .. (is_mode("debug") and debug_suffix or "")
             end
         end
         if target:is_plat("android") then --> -lQt5Core_armeabi/-lQt5CoreDebug_armeabi for 5.14.x
@@ -70,7 +70,11 @@ function _find_static_links_3rd(target, linkdirs, qt_sdkver, libpattern)
         for _, libpath in ipairs(os.files(path.join(linkdir, libpattern))) do
             local basename = path.basename(libpath)
             -- we need ignore qt framework libraries, e.g. libQt5xxx.a, Qt5Core.lib ..
-            if not basename:startswith("libQt" .. qt_sdkver:major()) and not basename:startswith("Qt" .. qt_sdkver:major()) then
+            -- but bundled library names like libQt5Bundledxxx.a on Qt6.x
+            -- @see https://github.com/xmake-io/xmake/issues/3572
+            if basename:startswith("libQt" .. qt_sdkver:major() .. "Bundled") or (
+                (not basename:startswith("libQt" .. qt_sdkver:major())) and
+                (not basename:startswith("Qt" .. qt_sdkver:major()))) then
                 if (is_mode("debug") and basename:endswith(debug_suffix)) or (not is_mode("debug") and not basename:endswith(debug_suffix)) then
                     table.insert(links, core_target.linkname(path.filename(libpath)))
                 end
@@ -90,6 +94,8 @@ function _add_plugins(target, plugins)
         if plugin.linkdirs then
             target:values_add("qt.linkdirs", table.unpack(table.wrap(plugin.linkdirs)))
         end
+        -- TODO: add prebuilt object files in qt sdk.
+        -- these file is located at plugins/xxx/objects-Release/xxxPlugin_init/xxxPlugin_init.cpp.o
     end
 end
 
@@ -282,9 +288,18 @@ function main(target, opt)
     end
     target:set("frameworks", local_frameworks)
 
-    -- add some static third-party links if exists, e.g. libqtmain.a, libqtfreetype.q, libqtlibpng.a
+    -- add some static third-party links if exists
     -- and exclude qt framework libraries, e.g. libQt5xxx.a, Qt5xxx.lib
-    target:add("syslinks", _find_static_links_3rd(target, qt.libdir, qt_sdkver, target:is_plat("windows") and "qt*.lib" or "libqt*.a"))
+    local libpattern
+    if qt_sdkver:ge("6.0") then
+        -- e.g. libQt6BundledFreetype.a on Qt6.x
+        -- @see https://github.com/xmake-io/xmake/issues/3572
+        libpattern = target:is_plat("windows") and "Qt*.lib" or "libQt*.a"
+    else
+        -- e.g. libqtmain.a, libqtfreetype.q, libqtlibpng.a on Qt5.x
+        libpattern = target:is_plat("windows") and "qt*.lib" or "libqt*.a"
+    end
+    target:add("syslinks", _find_static_links_3rd(target, qt.libdir, qt_sdkver, libpattern))
 
     -- add user syslinks
     if syslinks_user then
@@ -331,7 +346,13 @@ function main(target, opt)
         -- we need fix it, because gcc maybe does not work on latest mingw when `-isystem D:\a\_temp\msys64\mingw64\include` is passed.
         -- and qt.includedir will be this path value when Qt sdk directory just is `D:\a\_temp\msys64\mingw64`
         -- @see https://github.com/msys2/MINGW-packages/issues/10761#issuecomment-1044302523
-        if qt.includedir and os.isdir(qt.includedir) then
+        if is_subhost("msys") then
+            local mingw_prefix = os.getenv("MINGW_PREFIX")
+            local mingw_includedir = path.normalize(path.join(mingw_prefix or "/", "include"))
+            if qt.includedir and qt.includedir and path.normalize(qt.includedir) ~= mingw_includedir then
+                _add_includedirs(target, qt.includedir)
+            end
+        else
             _add_includedirs(target, qt.includedir)
         end
         _add_includedirs(target, path.join(qt.mkspecsdir, "win32-g++"))
@@ -349,6 +370,11 @@ function main(target, opt)
         _add_includedirs(target, path.join(qt.mkspecsdir, "wasm-emscripten"))
         target:add("rpathdirs", qt.libdir)
         target:add("linkdirs", qt.libdir)
+        -- add prebuilt object files in qt sdk.
+        -- these file is located at lib/objects-Release/xxxmodule_resources_x/.rcc/xxxmodule.cpp.o
+        for _, filepath in ipairs(os.files(path.join(qt.libdir, "objects-*", "*_resources_*", ".rcc", "*.o"))) do
+            table.insert(target:objectfiles(), filepath)
+        end
         target:add("ldflags", "-s WASM=1", "-s FETCH=1", "-s FULL_ES2=1", "-s FULL_ES3=1", "-s USE_WEBGL2=1", "--bind")
         target:add("ldflags", "-s ERROR_ON_UNDEFINED_SYMBOLS=1", "-s EXTRA_EXPORTED_RUNTIME_METHODS=[\"UTF16ToString\",\"stringToUTF16\"]", "-s ALLOW_MEMORY_GROWTH=1")
         target:add("shflags", "-s WASM=1", "-s FETCH=1", "-s FULL_ES2=1", "-s FULL_ES3=1", "-s USE_WEBGL2=1", "--bind")

@@ -33,7 +33,8 @@ function _find_package(cmake, name, opt)
     io.writefile(path.join(workdir, "test.cpp"), "")
 
     -- generate CMakeLists.txt
-    local cmakefile = io.open(path.join(workdir, "CMakeLists.txt"), "w")
+    local filepath = path.join(workdir, "CMakeLists.txt")
+    local cmakefile = io.open(filepath, "w")
     if cmake.version then
         cmakefile:print("cmake_minimum_required(VERSION %s)", cmake.version)
     end
@@ -81,25 +82,40 @@ function _find_package(cmake, name, opt)
     cmakefile:print("find_package(%s REQUIRED %s)", requirestr, componentstr)
     cmakefile:print("if(%s_FOUND)", name)
     cmakefile:print("   add_executable(%s test.cpp)", testname)
-    cmakefile:print("   target_include_directories(%s PRIVATE ${%s_INCLUDE_DIR} ${%s_INCLUDE_DIRS})",
-        testname, name, name)
-    cmakefile:print("   target_include_directories(%s PRIVATE ${%s_INCLUDE_DIR} ${%s_INCLUDE_DIRS})",
-        testname, name:upper(), name:upper())
+    -- setup include directories
+    local includedirs = ""
+    if configs.include_directories then
+        includedirs = table.concat(table.wrap(configs.include_directories), " ")
+    else
+        includedirs = ("${%s_INCLUDE_DIR} ${%s_INCLUDE_DIRS}"):format(name, name)
+        includedirs = includedirs .. (" ${%s_INCLUDE_DIR} ${%s_INCLUDE_DIRS}"):format(name:upper(), name:upper())
+    end
+    cmakefile:print("   target_include_directories(%s PRIVATE %s)", testname, includedirs)
+    -- reserved for backword compatibility
     cmakefile:print("   target_include_directories(%s PRIVATE ${%s_CXX_INCLUDE_DIRS})",
         testname, name)
-    cmakefile:print("   target_link_libraries(%s ${%s_LIBRARY} ${%s_LIBRARIES} ${%s_LIBS})",
-        testname, name, name, name)
-    cmakefile:print("   target_link_libraries(%s ${%s_LIBRARY} ${%s_LIBRARIES} ${%s_LIBS})",
-        testname, name:upper(), name:upper(), name:upper())
+    -- setup link library/target
+    local linklibs = ""
     if configs.link_libraries then
-        cmakefile:print("   target_link_libraries(%s %s)",
-            testname, table.concat(table.wrap(configs.link_libraries), " "))
+        linklibs = table.concat(table.wrap(configs.link_libraries), " ")
+    else
+        linklibs = ("${%s_LIBRARY} ${%s_LIBRARIES} ${%s_LIBS}"):format(name, name, name)
+        linklibs = linklibs .. (" ${%s_LIBRARY} ${%s_LIBRARIES} ${%s_LIBS}"):format(name:upper(), name:upper(), name:upper())
     end
+    cmakefile:print("   target_link_libraries(%s PRIVATE %s)", testname, linklibs)
     cmakefile:print("endif(%s_FOUND)", name)
     cmakefile:close()
+    if option.get("diagnosis") then
+        local cmakedata = io.readfile(filepath)
+        cprint("finding it from the generated CMakeLists.txt:\n${dim}%s", cmakedata)
+    end
 
     -- run cmake
     local envs = configs.envs or opt.envs
+    if opt.mode == "debug" then
+        envs = envs or {}
+        envs.CMAKE_BUILD_TYPE = envs.CMAKE_BUILD_TYPE or "Debug"
+    end
     try {function() return os.vrunv(cmake.program, {workdir}, {curdir = workdir, envs = envs}) end}
 
     -- pares defines and includedirs for macosx/linux
@@ -114,7 +130,7 @@ function _find_package(cmake, name, opt)
         local flagsdata = io.readfile(flagsfile)
         if flagsdata then
             if option.get("diagnosis") then
-                vprint(flagsdata)
+                cprint("finding includes from %s\n${dim}%s", flagsfile, flagsdata)
             end
             for _, line in ipairs(flagsdata:split("\n", {plain = true})) do
                 if line:find("CXX_INCLUDES =", 1, true) then
@@ -154,7 +170,7 @@ function _find_package(cmake, name, opt)
         local linkdata = io.readfile(linkfile)
         if linkdata then
             if option.get("diagnosis") then
-                vprint(linkdata)
+                cprint("finding links from %s\n${dim}%s", linkfile, linkdata)
             end
             for _, line in ipairs(os.argv(linkdata)) do
                 local is_ldflags = false

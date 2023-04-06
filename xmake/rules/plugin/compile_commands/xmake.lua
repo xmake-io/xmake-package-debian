@@ -21,7 +21,7 @@
 -- update compile_commandss.json automatically
 --
 -- @code
--- add_rules("plugin.compile_commands.autoupdate", {outputdir = ".vscode"})
+-- add_rules("plugin.compile_commands.autoupdate", {outputdir = ".vscode", lsp = "clangd"})
 -- target("test")
 --     set_kind("binary")
 --     add_files("src/*.c")
@@ -37,18 +37,25 @@ rule("plugin.compile_commands.autoupdate")
         import("core.project.project")
         import("core.base.task")
 
+        -- we should not update it if we are installing xmake package
+        if os.getenv("XMAKE_IN_XREPO") then
+            return
+        end
+
         -- run only once for all xmake process in vs
         local tmpfile = path.join(config.buildir(), ".gens", "rules", "plugin.compile_commands.autoupdate")
         local dependfile = tmpfile .. ".d"
         local lockfile = io.openlock(tmpfile .. ".lock")
         if lockfile:trylock() then
             local outputdir
+            local lsp
             local sourcefiles = {}
             for _, target in pairs(project.targets()) do
                 table.join2(sourcefiles, target:sourcefiles(), target:headerfiles())
                 local extraconf = target:extraconf("rules", "plugin.compile_commands.autoupdate")
-                if extraconf and extraconf.outputdir then
+                if extraconf then
                     outputdir = extraconf.outputdir
+                    lsp = extraconf.lsp
                 end
             end
             table.sort(sourcefiles)
@@ -56,7 +63,7 @@ rule("plugin.compile_commands.autoupdate")
                 -- we use task instead of os.exec("xmake") to avoid the project lock
                 local filename = "compile_commands.json"
                 local filepath = outputdir and path.join(outputdir, filename) or filename
-                task.run("project", {kind = "compile_commands", outputdir = outputdir})
+                task.run("project", {kind = "compile_commands", outputdir = outputdir, lsp = lsp})
                 print("compile_commands.json updated!")
             end, {dependfile = dependfile,
                   files = project.allfiles(),

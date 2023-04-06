@@ -26,9 +26,6 @@
     <a href="https://www.reddit.com/r/xmake/">
       <img src="https://img.shields.io/badge/chat-on%20reddit-ff3f34.svg?style=flat-square" alt="Reddit" />
     </a>
-    <a href="https://gitter.im/xmake-io/xmake?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge">
-      <img src="https://img.shields.io/gitter/room/xmake-io/xmake.svg?style=flat-square&colorB=96c312" alt="Gitter" />
-    </a>
     <a href="https://t.me/tbooxorg">
       <img src="https://img.shields.io/badge/chat-on%20telegram-blue.svg?style=flat-square" alt="Telegram" />
     </a>
@@ -100,13 +97,13 @@ xmake 官方也推出了一些入门课程，带你一步步快速上手 xmake�
 #### 使用curl
 
 ```bash
-bash <(curl -fsSL https://xmake.io/shget.text)
+curl -fsSL https://xmake.io/shget.text | bash
 ```
 
 #### 使用wget
 
 ```bash
-bash <(wget https://xmake.io/shget.text -O -)
+wget https://xmake.io/shget.text -O - | bash
 ```
 
 #### 使用powershell
@@ -225,7 +222,7 @@ $ xmake f --menu
 
 ### 包管理特性
 
-* 官方仓库提供近 700+ 常用包，真正做到全平台一键下载集成编译
+* 官方仓库提供近 800+ 常用包，真正做到全平台一键下载集成编译
 * 全平台包支持，支持交叉编译的依赖包集成
 * 支持包虚拟环境管理和加载，`xrepo env shell`
 * Windows 云端预编译包加速
@@ -651,7 +648,6 @@ with:
 * 社区
   - [Reddit论坛](https://www.reddit.com/r/xmake/)
   - [Telegram群组](https://t.me/tbooxorg)
-  - [Gitter聊天室](https://gitter.im/xmake-io/xmake?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
   - [Discord聊天室](https://discord.gg/xmake)
   - QQ群：343118190, 662147501
 * 源码：[Github](https://github.com/xmake-io/xmake), [Gitee](https://gitee.com/tboox/xmake)

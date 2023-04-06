@@ -417,11 +417,12 @@ force to build in current directory via run `xmake -P .`]], os.projectdir())
             localcache.clear("config")
         end
 
-        -- clear detection cache
+        -- clear some local caches
         localcache.clear("detect")
         localcache.clear("option")
         localcache.clear("package")
         localcache.clear("toolchain")
+        localcache.clear("cxxmodules")
         localcache.set("config", "recheck", true)
         localcache.save()
 
@@ -460,12 +461,6 @@ force to build in current directory via run `xmake -P .`]], os.projectdir())
         -- otherwise has_package() will be invalid.
         _check_targets()
 
-        -- update the config files
-        generate_configfiles({force = recheck})
-        if recheck then
-            generate_configheader()
-        end
-
         -- check target toolchains
         if recheck then
             _check_target_toolchains()
@@ -476,6 +471,12 @@ force to build in current directory via run `xmake -P .`]], os.projectdir())
 
         -- config targets
         _config_targets()
+
+        -- update the config files
+        generate_configfiles({force = recheck})
+        if recheck then
+            generate_configheader()
+        end
     end
 
     -- dump config

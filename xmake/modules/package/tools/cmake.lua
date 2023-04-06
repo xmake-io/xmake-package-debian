@@ -127,7 +127,7 @@ end
 function _get_cflags_from_packagedeps(package, opt)
     local result = {}
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = type(depname) == "string" and package:dep(depname) or depname
+        local dep = type(depname) ~= "string" and depname or package:dep(depname)
         if dep then
             local fetchinfo = dep:fetch({external = false})
             if fetchinfo then
@@ -144,7 +144,7 @@ end
 function _get_ldflags_from_packagedeps(package, opt)
     local result = {}
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = type(depname) == "string" and package:dep(depname) or depname
+        local dep = type(depname) ~= "string" and depname or package:dep(depname)
         if dep then
             local fetchinfo = dep:fetch({external = false})
             if fetchinfo then
@@ -378,6 +378,7 @@ function _get_configs_for_android(package, configs, opt)
         table.insert(configs, "-DCMAKE_TOOLCHAIN_FILE=" .. path.join(ndk, "build/cmake/android.toolchain.cmake"))
         table.insert(configs, "-DANDROID_ABI=" .. package:arch())
         if ndk_sdkver then
+            table.insert(configs, "-DANDROID_PLATFORM=android-" .. ndk_sdkver)
             table.insert(configs, "-DANDROID_NATIVE_API_LEVEL=" .. ndk_sdkver)
         end
         if ndk_cxxstl then
@@ -792,7 +793,10 @@ end
 -- do build for ninja
 function _build_for_ninja(package, configs, opt)
     opt = opt or {}
-    ninja.build(package, {}, {envs = opt.envs or buildenvs(package, opt)})
+    ninja.build(package, {}, {envs = opt.envs or buildenvs(package, opt),
+        jobs = opt.jobs,
+        buildir = opt.buildir,
+        target = opt.target})
 end
 
 -- do build for cmake/build
@@ -874,7 +878,10 @@ end
 -- do install for ninja
 function _install_for_ninja(package, configs, opt)
     opt = opt or {}
-    ninja.install(package, {}, {envs = opt.envs or buildenvs(package, opt)})
+    ninja.install(package, {}, {envs = opt.envs or buildenvs(package, opt),
+        jobs = opt.jobs,
+        buildir = opt.buildir,
+        target = opt.target})
 end
 
 -- do install for cmake/build

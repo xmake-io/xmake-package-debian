@@ -1,3 +1,9 @@
+xmake (2.7.8-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Ruki Wang <waruqi@gmail.com>  Thu, 6 Apr 2023 09:00:37 +0800
+
 xmake (2.7.7-1) unstable; urgency=medium
 
   * New upstream release

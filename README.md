@@ -26,9 +26,6 @@
     <a href="https://www.reddit.com/r/xmake/">
       <img src="https://img.shields.io/badge/chat-on%20reddit-ff3f34.svg?style=flat-square" alt="Reddit" />
     </a>
-    <a href="https://gitter.im/xmake-io/xmake?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge">
-      <img src="https://img.shields.io/gitter/room/xmake-io/xmake.svg?style=flat-square&colorB=96c312" alt="Gitter" />
-    </a>
     <a href="https://t.me/tbooxorg">
       <img src="https://img.shields.io/badge/chat-on%20telegram-blue.svg?style=flat-square" alt="Telegram" />
     </a>
@@ -92,13 +89,13 @@ If you want to know more, please refer to: [Documents](https://xmake.io/#/gettin
 #### via curl
 
 ```bash
-bash <(curl -fsSL https://xmake.io/shget.text)
+curl -fsSL https://xmake.io/shget.text | bash
 ```
 
 #### via wget
 
 ```bash
-bash <(wget https://xmake.io/shget.text -O -)
+wget https://xmake.io/shget.text -O - | bash
 ```
 
 #### via powershell
@@ -216,7 +213,7 @@ The test project: [xmake-core](https://github.com/xmake-io/xmake/tree/master/cor
 
 ### Package management features
 
-* The official repository provides nearly 700+ packages with one-click compilation on all platforms
+* The official repository provides nearly 800+ packages with one-click compilation on all platforms
 * Full platform package support, support for cross-compiled dependent packages
 * Support package virtual environment using `xrepo env shell`
 * Precompiled package acceleration for Windows
@@ -644,7 +641,6 @@ This will help the xmake project and it's community to grow stronger.
 * Community
   - [Chat on reddit](https://www.reddit.com/r/xmake/)
   - [Chat on telegram](https://t.me/tbooxorg)
-  - [Chat on gitter](https://gitter.im/xmake-io/xmake?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
   - [Chat on discord](https://discord.gg/xmake)
   - Chat on QQ Group: 343118190, 662147501
 * Source Code：[Github](https://github.com/xmake-io/xmake), [Gitee](https://gitee.com/tboox/xmake)

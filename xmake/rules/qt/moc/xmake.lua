@@ -28,7 +28,7 @@ rule("qt.moc")
         import("core.tool.compiler")
 
         -- get moc
-        local qt = assert(target:data("qt"), "qt not found!")
+        local qt = assert(target:data("qt"), "Qt not found!")
         local moc = path.join(qt.bindir, is_host("windows") and "moc.exe" or "moc")
         if not os.isexec(moc) and qt.libexecdir then
             moc = path.join(qt.libexecdir, is_host("windows") and "moc.exe" or "moc")
@@ -76,7 +76,9 @@ rule("qt.moc")
                     end
                     return item
                 end)
-                table.insert(flags, pathitem)
+                if not pathitem:empty() then
+                    table.insert(flags, pathitem)
+                end
             end
         end
         local user_flags = target:get("qt.moc.flags") or {}

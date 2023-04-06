@@ -167,7 +167,6 @@ function _load_require(require_str, requires_extra, parentinfo)
     "verify", "external", "private", "build", "configs", "version")
     for name, value in pairs(require_extra) do
         if not extra_options:has(name) then
-            print("not found")
             wprint("add_requires(\"%s\") has unknown option: {%s=%s}!", require_str, name, tostring(value))
         end
     end
@@ -212,9 +211,10 @@ end
 
 -- load package package from repositories
 function _load_package_from_repository(packagename, opt)
+    opt = opt or {}
     local packagedir, repo = repository.packagedir(packagename, opt)
     if packagedir then
-        return core_package.load_from_repository(packagename, repo, packagedir)
+        return core_package.load_from_repository(packagename, packagedir, {plat = opt.plat, arch = opt.arch, repo = repo})
     end
 end
 
@@ -360,10 +360,13 @@ function _select_package_version(package, requireinfo, locked_requireinfo)
     local version = nil
     local require_version = requireinfo.version
     local require_verify  = requireinfo.verify
-    if (not package:get("versions") or require_verify == false) and semver.is_valid(require_version) then
+    if (not package:get("versions") or require_verify == false)
+        and (semver.is_valid(require_version) or semver.is_valid_range(require_version)) then
         -- no version list in package() or need not verify sha256sum? try selecting this version directly
-        -- @see https://github.com/xmake-io/xmake/issues/930
+        -- @see
+        -- https://github.com/xmake-io/xmake/issues/930
         -- https://github.com/xmake-io/xmake/issues/1009
+        -- https://github.com/xmake-io/xmake/issues/3551
         version = require_version
         source = "version"
     elseif #package:versions() > 0 then -- select version?
@@ -495,6 +498,13 @@ end
 
 -- finish requireinfo
 function _finish_requireinfo(requireinfo, package)
+    -- we need to synchronise the plat/arch inherited from the parent package as early as possible
+    if requireinfo.plat then
+        package:plat_set(requireinfo.plat)
+    end
+    if requireinfo.arch then
+        package:arch_set(requireinfo.arch)
+    end
     requireinfo.configs = requireinfo.configs or {}
     if not package:is_headeronly() then
         if requireinfo.configs.vs_runtime == nil and package:is_plat("windows") then
@@ -750,7 +760,10 @@ function _load_package(packagename, requireinfo, opt)
     local from_repo = false
     if not package then
         package = _load_package_from_repository(packagename, {
-            name = requireinfo.reponame, locked_repo = locked_requireinfo and locked_requireinfo.repo})
+            plat = requireinfo.plat,
+            arch = requireinfo.arch,
+            name = requireinfo.reponame,
+            locked_repo = locked_requireinfo and locked_requireinfo.repo})
         if package then
             from_repo = true
         end

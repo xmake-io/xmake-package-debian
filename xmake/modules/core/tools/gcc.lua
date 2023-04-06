@@ -32,7 +32,6 @@ import("utils.progress")
 import("private.cache.build_cache")
 import("private.service.distcc_build.client", {alias = "distcc_build_client"})
 
--- init it
 function init(self)
 
     -- init mxflags
@@ -43,16 +42,6 @@ function init(self)
 
     -- init shflags
     self:set("shflags", "-shared")
-
-    -- add -fPIC for shared
-    --
-    -- we need check it for clang/gcc with window target
-    -- @see https://github.com/xmake-io/xmake/issues/1392
-    --
-    if not self:is_plat("windows", "mingw") and self:has_flags("-fPIC", "cxflags") then
-        self:add("shflags", "-fPIC")
-        self:add("shared.cxflags", "-fPIC")
-    end
 
     -- init flags map
     self:set("mapflags", {
@@ -76,6 +65,21 @@ function init(self)
     end
 end
 
+-- we can only call has_flags in load(),
+-- as it requires the full platform toolchain flags.
+--
+function load(self)
+    -- add -fPIC for shared
+    --
+    -- we need check it for clang/gcc with window target
+    -- @see https://github.com/xmake-io/xmake/issues/1392
+    --
+    if not self:is_plat("windows", "mingw") and self:has_flags("-fPIC") then
+        self:add("shflags", "-fPIC")
+        self:add("shared.cxflags", "-fPIC")
+    end
+end
+
 -- make the strip flag
 function nf_strip(self, level, target)
     local maps = {
@@ -84,6 +88,9 @@ function nf_strip(self, level, target)
     }
     if self:is_plat("macosx", "iphoneos") then
         maps.all = {"-Wl,-x", "-Wl,-dead_strip"}
+    elseif self:is_plat("windows") then
+        -- clang does not it on windows, TODO maybe we need test it for gcc
+        maps = {}
     end
     return maps[level]
 end
@@ -166,6 +173,7 @@ function nf_vectorext(self, extension)
     ,   ssse3 = "-mssse3"
     ,   avx   = "-mavx"
     ,   avx2  = "-mavx2"
+    ,   fma   = "-mfma"
     ,   neon  = "-mfpu=neon"
     }
     return maps[extension]

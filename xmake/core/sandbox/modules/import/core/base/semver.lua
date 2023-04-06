@@ -35,6 +35,11 @@ function sandbox_core_base_semver.new(version)
     return result
 end
 
+-- try parsing the given version string to semver instance
+function sandbox_core_base_semver.try_parse(version)
+    return semver.new(version)
+end
+
 -- match a valid version from the string
 --
 -- semver.match('xxx 1.2.3 xxx') => { major = 1, minor = 2, patch = 3, ... }
@@ -47,6 +52,12 @@ end
 -- is valid version?
 function sandbox_core_base_semver.is_valid(version)
     return semver.parse(version) ~= nil
+end
+
+-- is valid version range?
+function sandbox_core_base_semver.is_valid_range(range)
+    local ok = semver.satisfies("1.0", range)
+    return ok ~= nil
 end
 
 -- compare two version strings

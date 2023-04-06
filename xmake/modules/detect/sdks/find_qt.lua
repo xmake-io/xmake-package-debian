@@ -21,6 +21,7 @@
 -- imports
 import("lib.detect.find_file")
 import("lib.detect.find_tool")
+import("core.base.semver")
 import("core.base.option")
 import("core.base.global")
 import("core.project.config")
@@ -79,6 +80,14 @@ function _find_sdkdir(sdkdir, sdkver)
     end
     if is_host("windows") then
 
+        -- we find it from /mingw64 first
+        if is_subhost("msys") then
+            local mingw_prefix = os.getenv("MINGW_PREFIX")
+            if mingw_prefix and os.isdir(mingw_prefix) then
+                table.insert(paths, mingw_prefix)
+            end
+        end
+
         -- add paths from registry
         local regs =
         {
@@ -115,24 +124,51 @@ function _find_sdkdir(sdkdir, sdkver)
     end
 
     -- special case for android on windows, where qmake is a .bat from version 6.3
-    if is_host("windows") and is_plat("android") then
+    -- this case also applys to wasm
+    if is_host("windows") and is_plat("android", "wasm") then
         local qmake = find_file("qmake.bat", paths, {suffixes = subdirs})
         if qmake then
-            return path.directory(path.directory(qmake)), path.filename(qmake)
+            return path.directory(path.directory(qmake)), qmake
         end
     end
 
     -- attempt to find qmake
     local qmake = find_file(is_host("windows") and "qmake.exe" or "qmake", paths, {suffixes = subdirs})
     if qmake then
-        return path.directory(path.directory(qmake)), path.filename(qmake)
+        return path.directory(path.directory(qmake)), qmake
     end
 end
 
 -- find qmake
 function _find_qmake(sdkdir, sdkver)
+
+    -- we attempt to find qmake from qt sdkdir first
     local sdkdir, qmakefile = _find_sdkdir(sdkdir, sdkver)
-    local qmake = find_tool(qmakefile or "qmake", {paths = sdkdir and path.join(sdkdir, "bin")})
+    if qmakefile then
+        return qmakefile
+    end
+
+    -- try finding qmake with the specific version, e.g. /usr/bin/qmake6
+    -- https://github.com/xmake-io/xmake/pull/3555
+    local qmake
+    if sdkver then
+        sdkver = semver.try_parse(sdkver)
+        if sdkver then
+            qmake = find_tool("qmake", {program = "qmake" .. sdkver:major(), paths = sdkdir and path.join(sdkdir, "bin")})
+        end
+    end
+
+    -- we need find the default qmake in current system
+    -- maybe we only installed qmake6
+    if not qmake then
+        local suffixes = {"", "6"}
+        for _, suffix in ipairs(suffixes) do
+            qmake = find_tool("qmake", {program = "qmake" .. suffix, paths = sdkdir and path.join(sdkdir, "bin")})
+            if qmake then
+                break
+            end
+        end
+    end
     if qmake then
         return qmake.program
     end

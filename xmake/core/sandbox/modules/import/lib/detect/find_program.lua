@@ -28,6 +28,7 @@ local option      = require("base/winos")
 local table       = require("base/table")
 local utils       = require("base/utils")
 local option      = require("base/option")
+local profiler    = require("base/profiler")
 local project     = require("project/project")
 local detectcache = require("cache/detectcache")
 local sandbox     = require("sandbox/sandbox")
@@ -61,6 +62,8 @@ function sandbox_lib_detect_find_program._do_check(program, opt)
     local errors = nil
     if type(opt.check) == "string" then
         ok, errors = os.runv(program, {opt.check}, {envs = opt.envs})
+    elseif type(opt.check) == "table" then
+        ok, errors = os.runv(program, opt.check, {envs = opt.envs})
     else
         ok, errors = sandbox.load(opt.check, program)
     end
@@ -301,7 +304,9 @@ function sandbox_lib_detect_find_program.main(name, opt)
 
     -- find executable program
     checking = coroutine_running and name or nil
+    profiler:enter("find_program", name)
     result = sandbox_lib_detect_find_program._find(name, paths, opt)
+    profiler:leave("find_program", name)
     checking = nil
 
     -- cache result

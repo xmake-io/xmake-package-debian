@@ -36,6 +36,7 @@ local scopeinfo      = require("base/scopeinfo")
 local interpreter    = require("base/interpreter")
 local memcache       = require("cache/memcache")
 local toolchain      = require("tool/toolchain")
+local compiler       = require("tool/compiler")
 local sandbox        = require("sandbox/sandbox")
 local config         = require("project/config")
 local policy         = require("project/policy")
@@ -57,6 +58,16 @@ function _instance.new(name, info, opt)
     instance._REPO      = opt.repo
     instance._SCRIPTDIR = opt.scriptdir and path.absolute(opt.scriptdir)
     return instance
+end
+
+-- get memcache
+function _instance:_memcache()
+    local cache = self._MEMCACHE
+    if not cache then
+        cache = memcache.cache("core.package.package." .. tostring(self))
+        self._MEMCACHE = cache
+    end
+    return cache
 end
 
 -- get the package name
@@ -284,7 +295,10 @@ function _instance:artifacts_set(artifacts_info)
     local versions = self:get("versions")
     if versions then
         -- backup previous package configuration
-        self._ARTIFACTS_BACKUP = {urls = table.copy(self:urls()), versions = table.copy(versions), install = self:get("install")}
+        self._ARTIFACTS_BACKUP = {
+            urls = table.copy(self:urls()),
+            versions = table.copy(versions),
+            install = self:script("install")} -- self:get() will get a table, it will be broken when call self:set()
 
         -- we switch to urls of the precompiled artifacts
         self:urls_set(table.wrap(artifacts_info.urls))
@@ -586,16 +600,21 @@ function _instance:is_parallelize()
     return self:get("parallelize") ~= false
 end
 
--- is local embed package?
+-- is local embed source code package?
 -- we install directly from the local source code instead of downloading it remotely
-function _instance:is_embed()
+function _instance:is_source_embed()
     return self:get("sourcedir") and #self:urls() == 0 and self:script("install")
+end
+
+-- is local embed binary package? it's come from `xmake package`
+function _instance:is_binary_embed()
+    return self:get("installdir") and #self:urls() == 0 and not self:script("install") and self:script("fetch")
 end
 
 -- is local package?
 -- we will use local installdir and cachedir in current project
 function _instance:is_local()
-    return self:is_embed() or self:is_thirdparty()
+    return self:is_source_embed() or self:is_binary_embed() or self:is_thirdparty()
 end
 
 -- use external includes?
@@ -1105,6 +1124,23 @@ function _instance:toolconfig(name)
     end
 end
 
+-- get the target compiler
+function _instance:compiler(sourcekind)
+    local compilerinst = self:_memcache():get("compiler")
+    if not compilerinst then
+        if not sourcekind then
+            os.raise("please pass sourcekind to the first argument of package:compiler(), e.g. cc, cxx, as")
+        end
+        local instance, errors = compiler.load(sourcekind, self)
+        if not instance then
+            os.raise(errors)
+        end
+        compilerinst = instance
+        self:_memcache():set("compiler", compilerinst)
+    end
+    return compilerinst
+end
+
 -- has the given tool for the current package?
 --
 -- e.g.
@@ -1258,10 +1294,16 @@ end
 
 -- get the given configuration value of package
 function _instance:config(name)
+    local value
     local configs = self:configs()
     if configs then
-        return configs[name]
+        value = configs[name]
     end
+    -- we cannot get it from `self:get()`, because there are always some builtin configs.
+    if value == nil and self:base() then
+        value = self:base():config(name)
+    end
+    return value
 end
 
 -- set configuration value
@@ -2049,7 +2091,7 @@ end
 -- has the given c funcs?
 --
 -- @param funcs     the funcs
--- @param opt       the argument options, e.g. { includes = ""}
+-- @param opt       the argument options, e.g. {includes = "xxx.h", configs = {defines = ""}}
 --
 -- @return          true or false, errors
 --
@@ -2063,7 +2105,7 @@ end
 -- has the given c++ funcs?
 --
 -- @param funcs     the funcs
--- @param opt       the argument options, e.g. {includes = ""}
+-- @param opt       the argument options, e.g. {includes = "xxx.h", configs = {defines = ""}}
 --
 -- @return          true or false, errors
 --
@@ -2076,8 +2118,8 @@ end
 
 -- has the given c types?
 --
--- @param types  the types
--- @param opt       the argument options, e.g. { defines = ""}
+-- @param types     the types
+-- @param opt       the argument options, e.g. {configs = {defines = ""}}
 --
 -- @return          true or false, errors
 --
@@ -2090,8 +2132,8 @@ end
 
 -- has the given c++ types?
 --
--- @param types  the types
--- @param opt       the argument options, e.g. { defines = ""}
+-- @param types     the types
+-- @param opt       the argument options, e.g. {configs = {defines = ""}}
 --
 -- @return          true or false, errors
 --
@@ -2105,7 +2147,7 @@ end
 -- has the given c includes?
 --
 -- @param includes  the includes
--- @param opt       the argument options, e.g. { defines = ""}
+-- @param opt       the argument options, e.g. {configs = {defines = ""}}
 --
 -- @return          true or false, errors
 --
@@ -2119,7 +2161,7 @@ end
 -- has the given c++ includes?
 --
 -- @param includes  the includes
--- @param opt       the argument options, e.g. { defines = ""}
+-- @param opt       the argument options, e.g. {configs = {defines = ""}}
 --
 -- @return          true or false, errors
 --
@@ -2130,10 +2172,47 @@ function _instance:has_cxxincludes(includes, opt)
     return sandbox_module.import("lib.detect.has_cxxincludes", {anonymous = true})(includes, opt)
 end
 
+-- has the given c flags?
+--
+-- @param flags     the flags
+-- @param opt       the argument options, e.g. { flagskey = "xxx" }
+--
+-- @return          true or false, errors
+--
+function _instance:has_cflags(flags, opt)
+    local compinst = self:compiler("cc")
+    return compinst:has_flags(flags, "cflags", opt)
+end
+
+-- has the given c++ flags?
+--
+-- @param flags     the flags
+-- @param opt       the argument options, e.g. { flagskey = "xxx" }
+--
+-- @return          true or false, errors
+--
+function _instance:has_cxxflags(flags, opt)
+    local compinst = self:compiler("cxx")
+    return compinst:has_flags(flags, "cxxflags", opt)
+end
+
+-- has the given features?
+--
+-- @param features  the features, e.g. {"c_static_assert", "cxx_constexpr"}
+-- @param opt       the argument options, e.g. {flags = ""}
+--
+-- @return          true or false, errors
+--
+function _instance:has_features(features, opt)
+    opt = opt or {}
+    opt.target = self
+    return sandbox_module.import("core.tool.compiler", {anonymous = true}).has_features(features, opt)
+end
+
 -- check the given c snippets?
 --
 -- @param snippets  the snippets
--- @param opt       the argument options, e.g. { includes = ""}
+-- @param opt       the argument options, e.g. {includes = "xxx.h", configs = {defines = ""}}
 --
 -- @return          true or false, errors
 --
@@ -2147,7 +2226,7 @@ end
 -- check the given c++ snippets?
 --
 -- @param snippets  the snippets
--- @param opt       the argument options, e.g. { includes = ""}
+-- @param opt       the argument options, e.g. {includes = "xxx.h", configs = {defines = ""}}
 --
 -- @return          true or false, errors
 --
@@ -2156,6 +2235,34 @@ function _instance:check_cxxsnippets(snippets, opt)
     opt.target = self
     opt.configs = self:_generate_build_configs(opt.configs, {sourcekind = "cxx"})
     return sandbox_module.import("lib.detect.check_cxxsnippets", {anonymous = true})(snippets, opt)
+end
+
+-- check the given objc snippets?
+--
+-- @param snippets  the snippets
+-- @param opt       the argument options, e.g. {includes = "xxx.h", configs = {defines = ""}}
+--
+-- @return          true or false, errors
+--
+function _instance:check_msnippets(snippets, opt)
+    opt = opt or {}
+    opt.target = self
+    opt.configs = self:_generate_build_configs(opt.configs, {sourcekind = "mm"})
+    return sandbox_module.import("lib.detect.check_msnippets", {anonymous = true})(snippets, opt)
+end
+
+-- check the given objc++ snippets?
+--
+-- @param snippets  the snippets
+-- @param opt       the argument options, e.g. {includes = "xxx.h", configs = {defines = ""}}
+--
+-- @return          true or false, errors
+--
+function _instance:check_mxxsnippets(snippets, opt)
+    opt = opt or {}
+    opt.target = self
+    opt.configs = self:_generate_build_configs(opt.configs, {sourcekind = "mxx"})
+    return sandbox_module.import("lib.detect.check_mxxsnippets", {anonymous = true})(snippets, opt)
 end
 
 -- the current mode is belong to the given modes?
@@ -2445,22 +2552,24 @@ function package.load_from_project(packagename, project)
 end
 
 -- load the package from the package directory or package description file
-function package.load_from_repository(packagename, repo, packagedir, packagefile)
+function package.load_from_repository(packagename, packagedir, opt)
 
     -- get it directly from cache first
+    opt = opt or {}
     local instance = package._memcache():get2("packages", packagename)
     if instance then
         return instance
     end
 
-    -- load repository first for checking the xmake minimal version
+    -- load repository first for checking the xmake minimal version (deprecated)
+    local repo = opt.repo
     if repo then
         repo:load()
     end
 
     -- find the package script path
-    local scriptpath = packagefile
-    if not packagefile and packagedir then
+    local scriptpath = opt.packagefile
+    if not opt.packagefile and packagedir then
         scriptpath = path.join(packagedir, "xmake.lua")
     end
     if not scriptpath or not os.isfile(scriptpath) then
@@ -2469,6 +2578,20 @@ function package.load_from_repository(packagename, repo, packagedir, packagefile
 
     -- get interpreter
     local interp = package._interpreter()
+
+    -- we need modify plat/arch in description scope at same time
+    -- if plat/arch are passed to add_requires.
+    --
+    -- @see https://github.com/orgs/xmake-io/discussions/3439
+    --
+    -- e.g. add_requires("zlib~mingw", {plat = "mingw", arch = "x86_64"})
+    --
+    if opt.plat then
+        package._memcache():set("target_plat", opt.plat)
+    end
+    if opt.arch then
+        package._memcache():set("target_arch", opt.arch)
+    end
 
     -- load script
     local ok, errors = interp:load(scriptpath)
@@ -2490,6 +2613,14 @@ function package.load_from_repository(packagename, repo, packagedir, packagefile
 
     -- new an instance
     instance = _instance.new(packagename, packageinfo, {scriptdir = path.directory(scriptpath), repo = repo})
+
+    -- reset plat/arch
+    if opt.plat then
+        package._memcache():set("target_plat", nil)
+    end
+    if opt.arch then
+        package._memcache():set("target_arch", nil)
+    end
 
     -- save instance to the cache
     package._memcache():set2("packages", instance)
