@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set_project "xmake"
-set_version "2.7.8" "%Y%m%d"
+set_version "2.8.1" "%Y%m%d"
 
 # set warning all
 set_warnings "all"
@@ -23,7 +23,9 @@ if is_mode "debug"; then
     set_optimizes "none"
 else
     set_strip "all"
-    set_symbols "hidden"
+    if ! is_kind "shared"; then
+        set_symbols "hidden"
+    fi
     set_optimizes "smallest"
     # we cannot enable LTO on macOS arm64
     if is_plat "macosx" && ! is_arch "arm64"; then

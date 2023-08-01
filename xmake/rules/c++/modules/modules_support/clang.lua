@@ -59,7 +59,7 @@ function _get_clang_scan_deps(target)
             local basename = path.basename(program)
             local extension = path.extension(program)
             program = (basename:gsub("clang", "clang-scan-deps")) .. extension
-            if os.isdir(dir) then
+            if dir and dir ~= "." and os.isdir(dir) then
                 program = path.join(dir, program)
             end
             local result = find_tool("clang-scan-deps", {program = program, version = true})
@@ -328,7 +328,8 @@ function generate_dependencies(target, sourcebatch, opt)
                 common.fallback_generate_dependencies(target, jsonfile, sourcefile, function(file)
                     local compinst = target:compiler("cxx")
                     local compflags = compinst:compflags({sourcefile = file, target = target})
-                    -- exclude -fmodule* and -std=c++/gnu++* flags because, when they are set clang try to find bmi of imported modules but they don't exists a this point of compilation
+                    -- exclude -fmodule* and -std=c++/gnu++* flags because,
+                    -- when they are set clang try to find bmi of imported modules but they don't exists a this point of compilation
                     table.remove_if(compflags, function(_, flag)
                         return flag:startswith("-fmodule") or flag:startswith("-std=c++") or flag:startswith("-std=gnu++")
                     end)
@@ -434,7 +435,7 @@ function generate_stl_headerunits_for_batchcmds(target, batchcmds, headerunits, 
             common.memcache():set2(headerunit.name, "building", true)
             local flags = {
                 path(stlcachedir, function (p) return modulecachepathflag .. p end),
-                "-c", "-o", path(bmifile), "-x", "c++-system-header", headerunit.name}
+                "-c", "-Wno-everything", "-o", path(bmifile), "-x", "c++-system-header", headerunit.name}
             batchcmds:show_progress(opt.progress, "${color.build.object}compiling.headerunit.$(mode) %s", headerunit.name)
             _batchcmds_compile(batchcmds, target, flags)
         end
@@ -576,15 +577,12 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                 local fileconfig = target:fileconfig(cppfile)
                 if fileconfig and fileconfig.install then
                     batchjobs:addjob(name .. "_metafile", function(index, total)
-                        local outputdir = common.get_outputdir(target, cppfile)
-                        local metafilepath = path.join(outputdir, path.filename(cppfile) .. ".meta-info")
+                        local metafilepath = common.get_metafile(target, cppfile)
                         depend.on_changed(function()
                             progress.show(opt.progress, "${color.build.object}generating.module.metadata %s", name)
                             local metadata = common.generate_meta_module_info(target, name, cppfile, module.requires)
                             json.savefile(metafilepath, metadata)
-
                         end, {dependfile = target:dependfile(metafilepath), files = {cppfile}})
-
                     end, {rootjob = flushjob})
                 end
             end

@@ -593,7 +593,7 @@ end
 -- the current target is belong to the given platforms?
 function _instance:is_plat(...)
     local plat = self:plat()
-    for _, v in ipairs(table.join(...)) do
+    for _, v in ipairs(table.pack(...)) do
         if v and plat == v then
             return true
         end
@@ -603,7 +603,7 @@ end
 -- the current target is belong to the given architectures?
 function _instance:is_arch(...)
     local arch = self:arch()
-    for _, v in ipairs(table.join(...)) do
+    for _, v in ipairs(table.pack(...)) do
         if v and arch:find("^" .. v:gsub("%-", "%%-") .. "$") then
             return true
         end
@@ -1143,9 +1143,12 @@ function _instance:autogenfile(sourcefile, opt)
     -- we need replace '..' to '__' in this case
     --
     if path.is_absolute(relativedir) and os.host() == "windows" then
-        -- remove C:\\ and whitespaces
+        -- remove C:\\ and whitespaces and fix long path issue
         -- e.g. C:\\Program Files (x64)\\xxx\Windows.h
-        -- @see https://github.com/xmake-io/xmake/issues/3021
+        --
+        -- @see
+        -- https://github.com/xmake-io/xmake/issues/3021
+        -- https://github.com/xmake-io/xmake/issues/3715
         relativedir = hash.uuid4(relativedir):gsub("%-", ""):lower()
     end
     relativedir = relativedir:gsub("%.%.", "__")
@@ -1796,7 +1799,13 @@ function _instance:dependfile(objectfile)
         relativedir = origindir
     end
     if path.is_absolute(relativedir) and os.host() == "windows" then
-        relativedir = relativedir:gsub(":[\\/]*", '\\') -- replace C:\xxx\ => C\xxx\
+        -- remove C:\\ and whitespaces and fix long path issue
+        -- e.g. C:\\Program Files (x64)\\xxx\Windows.h
+        --
+        -- @see
+        -- https://github.com/xmake-io/xmake/issues/3021
+        -- https://github.com/xmake-io/xmake/issues/3715
+        relativedir = hash.uuid4(relativedir):gsub("%-", ""):lower()
     end
 
     -- originfile: project/build/.objs/xxxx/../../xxx.c will be out of range for objectdir
@@ -1812,25 +1821,15 @@ end
 
 -- get the dependent include files
 function _instance:dependfiles()
-
-    -- get source batches
     local sourcebatches, modified = self:sourcebatches()
-
-    -- cached? return it directly
     if self._DEPENDFILES and not modified then
         return self._DEPENDFILES
     end
-
-    -- get dependent files from source batches
     local dependfiles = {}
     for _, sourcebatch in pairs(self:sourcebatches()) do
         table.join2(dependfiles, sourcebatch.dependfiles)
     end
-
-    -- cache it
     self._DEPENDFILES = dependfiles
-
-    -- ok?
     return dependfiles
 end
 
@@ -2093,11 +2092,7 @@ end
 -- @param langkind  c/cxx
 --
 function _instance:pcoutputfile(langkind)
-
-    -- init cache
     self._PCOUTPUTFILES = self._PCOUTPUTFILES or {}
-
-    -- get it from the cache first
     local pcoutputfile = self._PCOUTPUTFILES[langkind]
     if pcoutputfile then
         return pcoutputfile
@@ -2109,7 +2104,9 @@ function _instance:pcoutputfile(langkind)
 
         -- is gcc?
         local is_gcc = false
-        local _, toolname = self:tool(langkind == "c" and "cc" or "cxx")
+        local sourcekinds = {c = "cc", cxx = "cxx", m = "mm", mxx = "mxx"}
+        local sourcekind = assert(sourcekinds[langkind], "unknown language kind: " .. langkind)
+        local _, toolname = self:tool(sourcekind)
         if toolname and (toolname == "gcc" or toolname == "gxx") then
             is_gcc = true
         end
@@ -2119,9 +2116,7 @@ function _instance:pcoutputfile(langkind)
         -- @note gcc has not -include-pch option to set the pch file path
         --
         pcoutputfile = self:objectfile(pcheaderfile)
-        pcoutputfile = path.join(path.directory(pcoutputfile), path.basename(pcoutputfile) .. (is_gcc and ".gch" or ".pch"))
-
-        -- save to cache
+        pcoutputfile = path.join(path.directory(pcoutputfile), sourcekind, path.basename(pcoutputfile) .. (is_gcc and ".gch" or ".pch"))
         self._PCOUTPUTFILES[langkind] = pcoutputfile
         return pcoutputfile
     end
@@ -2235,6 +2230,20 @@ function _instance:toolconfig(name)
     end})
 end
 
+-- has source files with the given source kind?
+function _instance:has_sourcekind(...)
+    local sourcekinds_set = self._SOURCEKINDS_SET
+    if sourcekinds_set == nil then
+        sourcekinds_set = hashset.from(self:sourcekinds())
+        self._SOURCEKINDS_SET = sourcekinds_set
+    end
+    for _, v in ipairs(table.pack(...)) do
+        if sourcekinds_set:has(v) then
+            return true
+        end
+    end
+end
+
 -- has the given tool for the current target?
 --
 -- e.g.
@@ -2245,7 +2254,7 @@ end
 function _instance:has_tool(toolkind, ...)
     local _, toolname = self:tool(toolkind)
     if toolname then
-        for _, v in ipairs(table.join(...)) do
+        for _, v in ipairs(table.pack(...)) do
             if v and toolname:find("^" .. v:gsub("%-", "%%-") .. "$") then
                 return true
             end

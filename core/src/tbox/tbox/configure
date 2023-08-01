@@ -409,9 +409,15 @@ path_toolname() {
         clang) toolname="clang";;
         clang-*) toolname="clang";;
         */clang-*) toolname="clang";;
+        */emcc) toolname="emcc";;
+        emcc) toolname="emcc";;
+        */em++) toolname="emxx";;
+        em++) toolname="emxx";;
         *-ar) toolname="ar";;
         */ar) toolname="ar";;
         ar) toolname="ar";;
+        */emar) toolname="emar";;
+        emar) toolname="emar";;
         cc) toolname="gcc";;
         */cc) toolname="gcc";;
         c++) toolname="gxx";;
@@ -639,6 +645,8 @@ if is_host "msys"; then
     _target_plat_default="mingw"
 elif is_host "freebsd"; then
     _target_plat_default="bsd"
+elif test_nz "${EMSDK}"; then
+    _target_plat_default="wasm"
 fi
 
 # set the default target architecture
@@ -647,6 +655,8 @@ if is_host "msys" && test_nz "${MSYSTEM_CARCH}"; then
     _target_arch_default="${MSYSTEM_CARCH}"
 elif test_nz "${TERMUX_ARCH}"; then
     _target_arch_default="${TERMUX_ARCH}"
+elif test_nz "${EMSDK}"; then
+    _target_arch_default="wasm32"
 fi
 if test_eq "${_target_arch_default}" "i686"; then
     _target_arch_default="i386"
@@ -658,6 +668,9 @@ fi
 
 # set the default target mode
 _target_mode_default="release"
+
+# set the default target kind
+_target_kind_default="static"
 
 # set the default project generator and build program
 if is_host "freebsd" "bsd"; then
@@ -723,6 +736,21 @@ is_mode() {
     local mode=""
     for mode in $@; do
         if test_eq "${_target_mode}" "${mode}"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# determining target kind
+# e.g.
+# if is_kind "release"; then
+#     ...
+# fi
+is_kind() {
+    local kind=""
+    for kind in $@; do
+        if test_eq "${_target_kind}" "${kind}"; then
             return 0
         fi
     done
@@ -795,7 +823,7 @@ _get_abstract_flag_for_gcc_clang() {
             string_replace "${value}" '"' '\\\"'; value="${_ret}"
             flag="-D${value}"
             ;;
-        udefines) flag="-U${value}";;
+        undefines) flag="-U${value}";;
         includedirs) flag="-I${value}";;
         linkdirs) flag="-L${value}";;
         links) flag="-l${value}";;
@@ -940,6 +968,8 @@ _get_abstract_flags() {
             gxx) _get_abstract_flag_for_gcc_clang "${toolkind}" "${toolname}" "${itemname}" "${value}"; flag="${_ret}";;
             clang) _get_abstract_flag_for_gcc_clang "${toolkind}" "${toolname}" "${itemname}" "${value}"; flag="${_ret}";;
             clangxx) _get_abstract_flag_for_gcc_clang "${toolkind}" "${toolname}" "${itemname}" "${value}"; flag="${_ret}";;
+            emcc) _get_abstract_flag_for_gcc_clang "${toolkind}" "${toolname}" "${itemname}" "${value}"; flag="${_ret}";;
+            emxx) _get_abstract_flag_for_gcc_clang "${toolkind}" "${toolname}" "${itemname}" "${value}"; flag="${_ret}";;
             *) raise "unknown toolname(${toolname})!" ;;
         esac
         if test_nz "${flag}"; then
@@ -1554,11 +1584,15 @@ _get_target_toolchain_flags_for_gcc() {
     local toolkind="${2}"
     local flags=""
     if is_arch "i386"; then
-        flags="-m32"
+        flags="${flags} -m32"
     fi
     _get_target_item "${name}" "kind"; local targetkind="${_ret}"
-    if test_eq "${targetkind}" "shared" && test_eq "${toolkind}" "sh"; then
-        flags="-shared -fPIC"
+    if test_eq "${targetkind}" "shared"; then
+        if test_eq "${toolkind}" "sh"; then
+            flags="${flags} -shared -fPIC"
+        elif test_eq "${toolkind}" "cc" || test_eq "${toolkind}" "cxx"; then
+            flags="${flags} -fPIC"
+        fi
     fi
     _ret="${flags}"
 }
@@ -1569,11 +1603,21 @@ _get_target_toolchain_flags_for_clang() {
     local toolkind="${2}"
     local flags="-Qunused-arguments"
     if is_arch "i386"; then
-        flags="-m32"
+        flags="${flags} -m32"
     fi
     _get_target_item "${name}" "kind"; local targetkind="${_ret}"
-    if test_eq "${targetkind}" "shared" && test_eq "${toolkind}" "sh"; then
-        flags="-shared -fPIC"
+    if test_eq "${targetkind}" "shared"; then
+        if test_eq "${toolkind}" "sh"; then
+            flags="${flags} -shared -fPIC"
+        elif test_eq "${toolkind}" "cc" || test_eq "${toolkind}" "cxx"; then
+            flags="${flags} -fPIC"
+        fi
+    fi
+    if is_plat "macosx"; then
+        _os_iorunv "xcrun" "-sdk" "macosx" "--show-sdk-path"; local sdkdir="${_ret}"
+        if test_nz "${sdkdir}"; then
+            flags="${flags} -isysroot \"${sdkdir}\""
+        fi
     fi
     _ret="${flags}"
 }
@@ -1589,7 +1633,10 @@ _get_target_toolchain_flags() {
         gxx) _get_target_toolchain_flags_for_gcc "${name}" "${toolkind}"; flags="${_ret}";;
         clang) _get_target_toolchain_flags_for_clang "${name}" "${toolkind}"; flags="${_ret}";;
         clangxx) _get_target_toolchain_flags_for_clang "${name}" "${toolkind}"; flags="${_ret}";;
+        emcc) _get_target_toolchain_flags_for_clang "${name}" "${toolkind}"; flags="${_ret}";;
+        emxx) _get_target_toolchain_flags_for_clang "${name}" "${toolkind}"; flags="${_ret}";;
         ar) _get_target_toolchain_flags_for_ar "${name}" "${toolkind}"; flags="${_ret}";;
+        emar) _get_target_toolchain_flags_for_ar "${name}" "${toolkind}"; flags="${_ret}";;
         *) raise "unknown toolname(${toolname})!" ;;
     esac
     _ret="${flags}"
@@ -2056,8 +2103,8 @@ add_defines() {
     fi
 }
 
-# add udefines in target
-add_udefines() {
+# add undefines in target
+add_undefines() {
     local undefine=""
     if ${_loading_targets} && test_z "${_xmake_sh_option_current}"; then
         local public=false
@@ -2076,7 +2123,7 @@ add_udefines() {
             done
         fi
     elif ${_loading_options} && test_nz "${_xmake_sh_option_current}"; then
-        _add_option_item "${_xmake_sh_option_current}" "udefines" "${@}"
+        _add_option_item "${_xmake_sh_option_current}" "undefines" "${@}"
     fi
 }
 
@@ -2595,6 +2642,10 @@ Common options:
   --mode=MODE             Set the given compilation mode. (default: '"${_target_mode_default}"')
                             - release
                             - debug
+  --kind=KIND             Set the given target kind. (default: '"${_target_kind_default}"')
+                            - static
+                            - shared
+                            - binary
   --toolchain=TOOLCHAIN   Set toolchain name.
                             - clang
                             - gcc
@@ -2667,6 +2718,9 @@ _handle_option() {
     elif test_eq "${name}" "mode"; then
         _target_mode=${value}
         return 0
+    elif test_eq "${name}" "kind"; then
+        _target_kind=${value}
+        return 0
     elif test_eq "${name}" "toolchain"; then
         _target_toolchain=${value}
         return 0
@@ -2718,7 +2772,8 @@ done
 #
 
 # parse triplet
-# e.g. i686-linux-gnu, aarch64-apple-darwin, x86_64-w64-mingw32
+# https://github.com/xmake-io/xmake/issues/3869
+# e.g. i686-linux-gnu, aarch64-apple-darwin, x86_64-w64-mingw32, i686-redhat-linux-gnu
 _parse_triplet() {
     local triplet="${1}"
     string_split "${triplet}" "-"
@@ -2754,6 +2809,7 @@ _get_plat_from_vendor_os() {
             fi
             ;;
         w64) _ret="mingw";;
+        *) _ret="${os}";;
     esac
 }
 
@@ -2872,6 +2928,18 @@ toolchain "aarch64_linux_gnu"
     set_toolset "ar" "aarch64-linux-gnu-ar" "ar"
 toolchain_end
 
+# emcc toolchain (wasm32)
+toolchain "emcc"
+    set_toolset "as" "emcc"
+    set_toolset "cc" "emcc"
+    set_toolset "cxx" "emcc" "em++"
+    set_toolset "mm" "emcc"
+    set_toolset "mxx" "emcc" "em++"
+    set_toolset "ld" "em++" "emcc"
+    set_toolset "sh" "em++" "emcc"
+    set_toolset "ar" "emar" "ar"
+toolchain_end
+
 # check platform
 _check_platform() {
     if test "x${_target_plat}" = "x"; then
@@ -2882,6 +2950,9 @@ _check_platform() {
     fi
     if test "x${_target_mode}" = "x"; then
         _target_mode=${_target_mode_default}
+    fi
+    if test "x${_target_kind}" = "x"; then
+        _target_kind=${_target_kind_default}
     fi
     echo "checking for platform ... ${_target_plat}"
     echo "checking for architecture ... ${_target_arch}"
@@ -2933,6 +3004,8 @@ _toolchain_compcmd() {
         gxx) _toolchain_compcmd_for_gcc_clang "${program}" "${objectfile}" "${sourcefile}" "${flags}"; compcmd="${_ret}";;
         clang) _toolchain_compcmd_for_gcc_clang "${program}" "${objectfile}" "${sourcefile}" "${flags}"; compcmd="${_ret}";;
         clangxx) _toolchain_compcmd_for_gcc_clang "${program}" "${objectfile}" "${sourcefile}" "${flags}"; compcmd="${_ret}";;
+        emcc) _toolchain_compcmd_for_gcc_clang "${program}" "${objectfile}" "${sourcefile}" "${flags}"; compcmd="${_ret}";;
+        emxx) _toolchain_compcmd_for_gcc_clang "${program}" "${objectfile}" "${sourcefile}" "${flags}"; compcmd="${_ret}";;
         *) raise "unknown toolname(${toolname})!" ;;
     esac
     _ret="${compcmd}"
@@ -2951,7 +3024,10 @@ _toolchain_linkcmd() {
         gxx) _toolchain_linkcmd_for_gcc_clang "${toolkind}" "${program}" "${binaryfile}" "${objectfiles}" "${flags}"; linkcmd="${_ret}";;
         clang) _toolchain_linkcmd_for_gcc_clang "${toolkind}" "${program}" "${binaryfile}" "${objectfiles}" "${flags}"; linkcmd="${_ret}";;
         clangxx) _toolchain_linkcmd_for_gcc_clang "${toolkind}" "${program}" "${binaryfile}" "${objectfiles}" "${flags}"; linkcmd="${_ret}";;
+        emcc) _toolchain_linkcmd_for_gcc_clang "${toolkind}" "${program}" "${binaryfile}" "${objectfiles}" "${flags}"; linkcmd="${_ret}";;
+        emxx) _toolchain_linkcmd_for_gcc_clang "${toolkind}" "${program}" "${binaryfile}" "${objectfiles}" "${flags}"; linkcmd="${_ret}";;
         ar) _toolchain_linkcmd_for_ar "${toolkind}" "${program}" "${binaryfile}" "${objectfiles}" "${flags}"; linkcmd="${_ret}";;
+        emar) _toolchain_linkcmd_for_ar "${toolkind}" "${program}" "${binaryfile}" "${objectfiles}" "${flags}"; linkcmd="${_ret}";;
         *) raise "unknown toolname(${toolname})!" ;;
     esac
     _ret="${linkcmd}"
@@ -3086,7 +3162,10 @@ _toolchain_try_program() {
         gxx) _toolchain_try_gxx "${kind}" "${program}" && ok=true;;
         clang) _toolchain_try_clang "${kind}" "${program}" && ok=true;;
         clangxx) _toolchain_try_clangxx "${kind}" "${program}" && ok=true;;
+        emcc) _toolchain_try_clang "${kind}" "${program}" && ok=true;;
+        emxx) _toolchain_try_clangxx "${kind}" "${program}" && ok=true;;
         ar) _toolchain_try_ar "${kind}" "${program}" && ok=true;;
+        emar) _toolchain_try_ar "${kind}" "${program}" && ok=true;;
         *) raise "unknown toolname(${toolname})!" ;;
     esac
     if ${ok}; then
@@ -3188,6 +3267,8 @@ _toolchain_detect() {
             else
                 toolchains="x86_64_w64_mingw32"
             fi
+        elif is_plat "wasm"; then
+            toolchains="emcc"
         elif is_plat "linux" && ! is_arch "${os_arch}"; then
             toolchains="envs"
             if is_arch "arm64"; then
@@ -3502,6 +3583,7 @@ fi
 plat="${_target_plat}"
 arch="${_target_arch}"
 mode="${_target_mode}"
+kind="${_target_kind}"
 
 #-----------------------------------------------------------------------------
 # load project targets
@@ -3746,15 +3828,11 @@ _gmake_add_switches() {
     echo "VV=@" >> "${xmake_sh_makefile}"
     echo "endif" >> "${xmake_sh_makefile}"
     echo "" >> "${xmake_sh_makefile}"
-    echo "INSTALLDIR:=" >> "${xmake_sh_makefile}"
-    echo "ifneq (\$(DESTDIR),)" >> "${xmake_sh_makefile}"
-    echo "INSTALLDIR:=\$(DESTDIR)" >> "${xmake_sh_makefile}"
-    echo "endif" >> "${xmake_sh_makefile}"
-    echo "" >> "${xmake_sh_makefile}"
     echo "ifeq (\$(PREFIX),)" >> "${xmake_sh_makefile}"
     echo "PREFIX=${_install_prefix_default}" >> "${xmake_sh_makefile}"
     echo "endif" >> "${xmake_sh_makefile}"
     echo "" >> "${xmake_sh_makefile}"
+    echo "INSTALLDIR:=\$(DESTDIR)" >> "${xmake_sh_makefile}"
     echo "ifneq (\$(PREFIX),)" >> "${xmake_sh_makefile}"
     echo "ifneq (\$(INSTALLDIR),)" >> "${xmake_sh_makefile}"
     echo "PREFIX_:=\$(patsubst /%,%,\$(PREFIX))" >> "${xmake_sh_makefile}"
@@ -3815,6 +3893,8 @@ _gmake_add_build_object() {
         gxx) _gmake_add_build_object_for_gcc_clang "${sourcekind}" "${sourcefile}" "${objectfile}" "${flagname}";;
         clang) _gmake_add_build_object_for_gcc_clang "${sourcekind}" "${sourcefile}" "${objectfile}" "${flagname}";;
         clangxx) _gmake_add_build_object_for_gcc_clang "${sourcekind}" "${sourcefile}" "${objectfile}" "${flagname}";;
+        emcc) _gmake_add_build_object_for_gcc_clang "${sourcekind}" "${sourcefile}" "${objectfile}" "${flagname}";;
+        emxx) _gmake_add_build_object_for_gcc_clang "${sourcekind}" "${sourcefile}" "${objectfile}" "${flagname}";;
         *) raise "unknown toolname(${toolname})!" ;;
     esac
     echo "" >> "${xmake_sh_makefile}"
@@ -3893,7 +3973,10 @@ _gmake_add_build_target() {
         gxx) _gmake_add_build_target_for_gcc_clang "${toolkind}" "${targetfile}" "${objectfiles}" "${flagname}";;
         clang) _gmake_add_build_target_for_gcc_clang "${toolkind}" "${targetfile}" "${objectfiles}" "${flagname}";;
         clangxx) _gmake_add_build_target_for_gcc_clang "${toolkind}" "${targetfile}" "${objectfiles}" "${flagname}";;
+        emcc) _gmake_add_build_target_for_gcc_clang "${toolkind}" "${targetfile}" "${objectfiles}" "${flagname}";;
+        emxx) _gmake_add_build_target_for_gcc_clang "${toolkind}" "${targetfile}" "${objectfiles}" "${flagname}";;
         ar) _gmake_add_build_target_for_ar "${toolkind}" "${targetfile}" "${objectfiles}" "${flagname}";;
+        emar) _gmake_add_build_target_for_ar "${toolkind}" "${targetfile}" "${objectfiles}" "${flagname}";;
         *) raise "unknown toolname(${toolname})!" ;;
     esac
     echo "" >> "${xmake_sh_makefile}"

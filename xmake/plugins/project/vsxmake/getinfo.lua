@@ -73,7 +73,7 @@ function _make_dirs(dir)
     return path.joinenv(r)
 end
 
-function _make_arrs(arr)
+function _make_arrs(arr, sep)
     if arr == nil then
         return ""
     end
@@ -82,10 +82,10 @@ function _make_arrs(arr)
     end
     local r = {}
     for k, v in ipairs(arr) do
-        r[k] = _make_arrs(v)
+        r[k] = _make_arrs(v, sep)
     end
     r = table.unique(r)
-    return table.concat(r, ";")
+    return table.concat(r, sep or ";")
 end
 
 -- get values from target
@@ -136,6 +136,11 @@ function _make_targetinfo(mode, arch, target)
 
     -- save defines
     targetinfo.defines       = _make_arrs(_get_values_from_target(target, "defines"))
+
+    -- save flags
+    targetinfo.cflags        = _make_arrs(_get_values_from_target(target, "cflags"), " ")
+    targetinfo.cxflags       = _make_arrs(_get_values_from_target(target, "cxflags"), " ")
+    targetinfo.cxxflags      = _make_arrs(_get_values_from_target(target, "cxxflags"), " ")
 
     -- save languages
     targetinfo.languages     = _make_arrs(_get_values_from_target(target, "languages"))
@@ -306,71 +311,10 @@ function _make_vsinfo_groups()
     return groups, group_deps
 end
 
--- config target
-function _config_target(target)
-    for _, rule in ipairs(target:orderules()) do
-        local on_config = rule:script("config")
-        if on_config then
-            on_config(target)
-        end
-    end
-    local on_config = target:script("config")
-    if on_config then
-        on_config(target)
-    end
-end
-
--- config targets
-function _config_targets()
-    for _, target in ipairs(project.ordertargets()) do
-        if target:is_enabled() then
-            _config_target(target)
-        end
-    end
-end
-
--- load rules in the required packages for target
-function _load_package_rules_for_target(target)
-    for _, rulename in ipairs(target:get("rules")) do
-        local packagename = rulename:match("@(.-)/")
-        if packagename then
-            local pkginfo = project.required_package(packagename)
-            if pkginfo then
-                local r = pkginfo:rule(rulename)
-                if r then
-                    target:rule_add(r)
-                    for _, dep in pairs(r:deps()) do
-                        target:rule_add(dep)
-                    end
-                end
-            end
-        end
-    end
-end
-
--- load rules in the required packages for targets
--- @see https://github.com/xmake-io/xmake/issues/2374
---
--- @code
--- add_requires("zlib", {system = false})
--- target("test")
---    set_kind("binary")
---    add_files("src/*.cpp")
---    add_packages("zlib")
---    add_rules("@zlib/test")
--- @endcode
---
-function _load_package_rules_for_targets()
-    for _, target in ipairs(project.ordertargets()) do
-        if target:is_enabled() then
-            _load_package_rules_for_target(target)
-        end
-    end
-end
-
 -- make filter
 function _make_filter(filepath, target, vcxprojdir)
     local filter
+    local is_plain = false
     local filegroups = target.filegroups
     if filegroups then
         -- @see https://github.com/xmake-io/xmake/issues/2282
@@ -392,6 +336,7 @@ function _make_filter(filepath, target, vcxprojdir)
                 if filepath:match(filepattern) then
                     if mode == "plain" then
                         filter = path.normalize(filegroup)
+                        is_plain = true
                     else
                         -- file tree mode (default)
                         if filegroup ~= "" then
@@ -408,7 +353,7 @@ function _make_filter(filepath, target, vcxprojdir)
             end
         end
     end
-    if not filter then
+    if not filter and not is_plain then
         -- use the default filter rule
         filter = path.relative(path.absolute(path.directory(filepath)), vcxprojdir)
         -- @see https://github.com/xmake-io/xmake/issues/2039
@@ -501,16 +446,13 @@ function main(outputdir, vsinfo)
             platform.load(config.plat(), arch):check()
 
             -- check project options
-            project.check()
+            project.check_options()
 
             -- install and update requires
             install_requires()
 
-            -- load package rules for targets
-            _load_package_rules_for_targets()
-
-            -- config targets
-            _config_targets()
+            -- load targets
+            project.load_targets()
 
             -- update config files
             generate_configfiles()

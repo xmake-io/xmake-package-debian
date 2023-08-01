@@ -50,6 +50,8 @@
 /* //////////////////////////////////////////////////////////////////////////////////////
  * macros
  */
+
+// proc/self
 #if defined(TB_CONFIG_OS_LINUX)
 #   define XM_PROC_SELF_FILE        "/proc/self/exe"
 #elif defined(TB_CONFIG_OS_BSD) && !defined(__OpenBSD__)
@@ -61,6 +63,9 @@
 #       define XM_PROC_SELF_FILE    "/proc/curproc/file"
 #   endif
 #endif
+
+// hook lua memory allocator
+#define XM_HOOK_LUA_MEMALLOC        (0)
 
 /* //////////////////////////////////////////////////////////////////////////////////////
  * types
@@ -935,9 +940,11 @@ static tb_void_t xm_engine_init_arch(xm_engine_t* engine)
     case PROCESSOR_ARCHITECTURE_AMD64:
         sysarch = "x64";
         break;
+#if defined(PROCESSOR_ARCHITECTURE_ARM64)
     case PROCESSOR_ARCHITECTURE_ARM64:
         sysarch = "arm64";
         break;
+#endif
     case PROCESSOR_ARCHITECTURE_ARM:
         sysarch = "arm";
         break;
@@ -954,9 +961,9 @@ static tb_void_t xm_engine_init_arch(xm_engine_t* engine)
 #   if defined(TB_ARCH_x64)
         sysarch = "x64";
 #   elif defined(TB_ARCH_ARM64)
-        sysarch = "arm64"
+        sysarch = "arm64";
 #   elif defined(TB_ARCH_ARM)
-        sysarch = "arm"
+        sysarch = "arm";
 #   else
         sysarch = "x86";
 #   endif
@@ -1032,12 +1039,23 @@ static tb_void_t xm_engine_init_signal(xm_engine_t* engine)
 #endif
 }
 
+#if XM_HOOK_LUA_MEMALLOC
+static tb_pointer_t xm_engine_lua_realloc(tb_pointer_t udata, tb_pointer_t data, size_t osize, size_t nsize)
+{
+    tb_pointer_t ptr = tb_null;
+    if (nsize == 0 && data) tb_free(data);
+    else if (!data) ptr = tb_malloc((tb_size_t)nsize);
+    else if (nsize != osize) ptr = tb_ralloc(data, (tb_size_t)nsize);
+    else ptr = data;
+    return ptr;
+}
+#endif
+
 /* //////////////////////////////////////////////////////////////////////////////////////
  * implementation
  */
 xm_engine_ref_t xm_engine_init(tb_char_t const* name, xm_engine_lni_initalizer_cb_t lni_initalizer)
 {
-    // done
     tb_bool_t     ok = tb_false;
     xm_engine_t*  engine = tb_null;
     do
@@ -1052,6 +1070,11 @@ xm_engine_ref_t xm_engine_init(tb_char_t const* name, xm_engine_lni_initalizer_c
         // init lua
         engine->lua = luaL_newstate();
         tb_assert_and_check_break(engine->lua);
+
+#if XM_HOOK_LUA_MEMALLOC
+        // hook lua memmory
+        lua_setallocf(engine->lua, xm_engine_lua_realloc, engine->lua);
+#endif
 
         // open lua libraries
         luaL_openlibs(engine->lua);
@@ -1186,20 +1209,15 @@ xm_engine_ref_t xm_engine_init(tb_char_t const* name, xm_engine_lni_initalizer_c
             }
         }
 #endif
-
-        // ok
         ok = tb_true;
 
     } while (0);
 
-    // failed?
     if (!ok)
     {
-        // exit it
         if (engine) xm_engine_exit((xm_engine_ref_t)engine);
         engine = tb_null;
     }
-
     return (xm_engine_ref_t)engine;
 }
 tb_void_t xm_engine_exit(xm_engine_ref_t self)
@@ -1245,10 +1263,7 @@ tb_int_t xm_engine_main(xm_engine_ref_t self, tb_int_t argc, tb_char_t** argv, t
     // exists this script?
     if (!tb_file_info(path, tb_null))
     {
-        // error
         tb_printf("not found main script: %s\n", path);
-
-        // failed
         return -1;
     }
 
@@ -1258,10 +1273,7 @@ tb_int_t xm_engine_main(xm_engine_ref_t self, tb_int_t argc, tb_char_t** argv, t
     // load and execute the main script
     if (luaL_dofile(engine->lua, path))
     {
-        // error
         tb_printf("error: %s\n", lua_tostring(engine->lua, -1));
-
-        // failed
         return -1;
     }
 
@@ -1273,10 +1285,7 @@ tb_int_t xm_engine_main(xm_engine_ref_t self, tb_int_t argc, tb_char_t** argv, t
     lua_getglobal(engine->lua, "_xmake_main");
     if (lua_pcall(engine->lua, 0, 1, -2))
     {
-        // error
         tb_printf("error: %s\n", lua_tostring(engine->lua, -1));
-
-        // failed
         return -1;
     }
 

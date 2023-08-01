@@ -26,7 +26,7 @@ toolchain("swift")
     set_description("Swift Programming Language Compiler")
 
     -- set toolset
-    set_toolset("sc",   "$(env SC)", "swiftc")
+    set_toolset("sc",   "$(env SC)", "swift-frontend", "swiftc")
     set_toolset("scld", "$(env SC)", "swiftc")
     set_toolset("scsh", "$(env SC)", "swiftc")
 

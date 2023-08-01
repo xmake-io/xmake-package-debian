@@ -26,8 +26,8 @@ import("core.language.language")
 function init(self)
 
     -- init flags map
-    self:set("mapflags",
-    {
+    self:set("mapflags", {
+
         -- symbols
         ["-fvisibility=hidden"]     = ""
 
@@ -59,37 +59,24 @@ end
 
 -- make the strip flag
 function nf_strip(self, level)
-
-    -- the maps
-    local maps =
-    {
+    local maps = {
         debug = "-Xlinker -S"
     ,   all   = "-Xlinker -s"
     }
-
-    -- make it
     return maps[level]
 end
 
 -- make the symbol flag
 function nf_symbol(self, level)
-
-    -- the maps
-    local maps =
-    {
+    local maps = {
         debug = "-g"
     }
-
-    -- make it
     return maps[level]
 end
 
 -- make the warning flag
 function nf_warning(self, level)
-
-    -- the maps
-    local maps =
-    {
+    local maps = {
         none       = "-suppress-warnings"
     ,   less       = "-warn-swift3-objc-inference-minimal"
     ,   more       = "-warn-swift3-objc-inference-minimal"
@@ -97,8 +84,6 @@ function nf_warning(self, level)
     ,   everything = "-warn-swift3-objc-inference-complete"
     ,   error      = "-warnings-as-errors"
     }
-
-    -- make it
     return maps[level]
 end
 
@@ -122,10 +107,7 @@ end
 
 -- make the vector extension flag
 function nf_vectorext(self, extension)
-
-    -- the maps
-    local maps =
-    {
+    local maps = {
         mmx   = "-mmmx"
     ,   sse   = "-msse"
     ,   sse2  = "-msse2"
@@ -135,8 +117,6 @@ function nf_vectorext(self, extension)
     ,   avx2  = "-mavx2"
     ,   neon  = "-mfpu=neon"
     }
-
-    -- make it
     return maps[extension]
 end
 

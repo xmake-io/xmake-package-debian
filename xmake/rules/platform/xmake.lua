@@ -19,6 +19,7 @@
 --
 
 rule("platform.wasm")
+    add_deps("platform.wasm.preloadfiles")
     add_deps("platform.wasm.installfiles")
 
 rule("platform.windows")

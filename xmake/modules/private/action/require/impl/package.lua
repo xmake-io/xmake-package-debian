@@ -144,7 +144,9 @@ function _load_require(require_str, requires_extra, parentinfo)
     end
 
     -- get required building configurations
-    local require_build_configs = require_extra.configs or require_extra.config
+    -- we need clone a new configs object, because the whole requireinfo will be modified later.
+    -- @see https://github.com/xmake-io/xmake-repo/pull/2067
+    local require_build_configs = table.clone(require_extra.configs or require_extra.config)
     if require_extra.debug then
         require_build_configs = require_build_configs or {}
         require_build_configs.debug = true
@@ -513,7 +515,10 @@ function _finish_requireinfo(requireinfo, package)
     end
     -- we need ensure readonly configs
     for _, name in ipairs(table.keys(requireinfo.configs)) do
-        if package:extraconf("configs", name, "readonly") then
+        local current = requireinfo.configs[name]
+        local default = package:extraconf("configs", name, "default")
+        if package:extraconf("configs", name, "readonly") and current ~= default then
+            wprint("configs.%s is readonly in package(%s), it's always %s", name, package:name(), default)
             -- package:config() will use default value after loading package
             requireinfo.configs[name] = nil
         end
@@ -990,16 +995,14 @@ function _compatible_with_previous_librarydeps(package, opt)
         return true
     end
 
-    -- has been checked?
-    local compatible_checked = package:data("librarydeps.compatible_checked")
-    if compatible_checked then
-        return
-    end
-
     -- check strict compatibility for librarydeps?
     local strict_compatibility = project.policy("package.librarydeps.strict_compatibility")
     if strict_compatibility == nil then
         strict_compatibility = package:policy("package.librarydeps.strict_compatibility")
+    end
+    -- and we can disable it manually, @see https://github.com/xmake-io/xmake/pull/3738
+    if strict_compatibility == false then
+       return true
     end
 
     -- compute the buildhash for current librarydeps

@@ -100,6 +100,7 @@
     <ClCompile>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);$(XmakeDefines)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(XmakeIncludeDirs)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) $(XmakeCFlags) $(XmakeCXFlags) $(XmakeCXXFlags)</AdditionalOptions>
       <LanguageStandard Condition="'%(LanguageStandard)' == '' And $(XmakeLanguages.Contains('cxx11'))">stdcpp11</LanguageStandard>
       <LanguageStandard Condition="'%(LanguageStandard)' == '' And $(XmakeLanguages.Contains('cxx14'))">stdcpp14</LanguageStandard>
       <LanguageStandard Condition="'%(LanguageStandard)' == '' And $(XmakeLanguages.Contains('cxx17'))">stdcpp17</LanguageStandard>
@@ -117,6 +118,10 @@
       <LanguageStandard Condition="'%(LanguageStandard)' == '' And $(XmakeLanguages.Contains('gnuxx2a'))">stdcpplatest</LanguageStandard>
       <LanguageStandard Condition="'%(LanguageStandard)' == '' And $(XmakeLanguages.Contains('gnuxx23'))">stdcpplatest</LanguageStandard>
       <LanguageStandard Condition="'%(LanguageStandard)' == '' And $(XmakeLanguages.Contains('gnuxx2b'))">stdcpplatest</LanguageStandard>
+      <LanguageStandard_C Condition="'%(LanguageStandard)' == '' And $(XmakeLanguages.Contains('c11'))">stdc11</LanguageStandard_C>
+      <LanguageStandard_C Condition="'%(LanguageStandard)' == '' And $(XmakeLanguages.Contains('c17'))">stdc17</LanguageStandard_C>
+      <LanguageStandard_C Condition="'%(LanguageStandard_C)' == '' And $(XmakeLanguages.Contains('gnu11'))">stdc11</LanguageStandard_C>
+      <LanguageStandard_C Condition="'%(LanguageStandard_C)' == '' And $(XmakeLanguages.Contains('gnu17'))">stdc17</LanguageStandard_C>
       <PrecompiledHeader Condition="'%(PrecompiledHeader)' == '' And $(XmakePrecompiledHeader.Contains('.h'))">Use</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'%(PrecompiledHeaderFile)' == '' And $(XmakePrecompiledHeader.Contains('.h'))">$(XmakeProjectDir)\$(XmakePrecompiledHeader)</PrecompiledHeaderFile>
       <ForcedIncludeFiles Condition="'%(ForcedIncludeFiles)' == '' And $(XmakePrecompiledHeader.Contains('.h'))">$(XmakeProjectDir)\$(XmakePrecompiledHeader);%(ForcedIncludeFiles)</ForcedIncludeFiles>

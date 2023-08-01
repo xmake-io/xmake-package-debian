@@ -2,7 +2,7 @@
 set_project("xmake")
 
 -- version
-set_version("2.7.8", {build = "%Y%m%d"})
+set_version("2.8.1", {build = "%Y%m%d"})
 
 -- set xmake min version
 set_xmakever("2.2.3")
@@ -38,7 +38,7 @@ end]]
 
 -- for the windows platform (msvc)
 if is_plat("windows") then
-    add_cxflags("-MT")
+    set_runtimes("MT")
     add_ldflags("-nodefaultlib:msvcrt.lib")
     add_links("kernel32", "user32", "gdi32")
 end

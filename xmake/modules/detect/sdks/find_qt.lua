@@ -161,7 +161,7 @@ function _find_qmake(sdkdir, sdkver)
     -- we need find the default qmake in current system
     -- maybe we only installed qmake6
     if not qmake then
-        local suffixes = {"", "6"}
+        local suffixes = {"", "6", "-qt5"}
         for _, suffix in ipairs(suffixes) do
             qmake = find_tool("qmake", {program = "qmake" .. suffix, paths = sdkdir and path.join(sdkdir, "bin")})
             if qmake then
@@ -176,19 +176,15 @@ end
 
 -- get qt environment
 function _get_qtenvs(qmake)
-    local envs = _g._ENVS
-    if not envs then
-        envs = {}
-        local results = try {function () return os.iorunv(qmake, {"-query"}) end}
-        if results then
-            for _, qtenv in ipairs(results:split('\n', {plain = true})) do
-                local kv = qtenv:split(':', {plain = true, limit = 2}) -- @note set limit = 2 for supporting value with win-style path, e.g. `key:C:\xxx`
-                if #kv == 2 then
-                    envs[kv[1]] = kv[2]:trim()
-                end
+    local envs = {}
+    local results = try {function () return os.iorunv(qmake, {"-query"}) end}
+    if results then
+        for _, qtenv in ipairs(results:split('\n', {plain = true})) do
+            local kv = qtenv:split(':', {plain = true, limit = 2}) -- @note set limit = 2 for supporting value with win-style path, e.g. `key:C:\xxx`
+            if #kv == 2 then
+                envs[kv[1]] = kv[2]:trim()
             end
         end
-        _g._ENVS = envs
     end
     return envs
 end

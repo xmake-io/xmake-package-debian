@@ -126,10 +126,10 @@
 #           endif
 #       elif __ARM_ARCH >= 7
 #           define TB_ARCH_ARM_v7
-#           define  TB_ARCH_STRING          "armv7"
+#           define TB_ARCH_STRING           "armv7"
 #       elif __ARM_ARCH >= 6
 #           define TB_ARCH_ARM_v6
-#           define  TB_ARCH_STRING          "armv6"
+#           define TB_ARCH_STRING           "armv6"
 #       else
 #           define TB_ARCH_ARM_v5
 #           define TB_ARCH_STRING           "armv5"
@@ -247,14 +247,14 @@
 #   else
 #       error unknown arch for tiny c, please define target like -DTCC_TARGET_I386
 #   endif
-#elif defined(__asmjs__) || defined(__asmjs)
+#elif defined(__wasm) || defined(__wasm__) || defined(__wasm64) || defined(__wasm64__)
 #   define TB_ARCH_WASM
-#   ifdef __ILP32__
-#       define TB_ARCH_WASM32
-#       define TB_ARCH_STRING                   "wasm32"
-#   else
+#   if defined(__wasm64__) || defined(__wasm64) || defined(_LP64) || defined(__LP64__)
 #       define TB_ARCH_WASM64
-#       define TB_ARCH_STRING                   "wasm64"
+#       define TB_ARCH_STRING               "wasm64"
+#   else
+#       define TB_ARCH_WASM32
+#       define TB_ARCH_STRING               "wasm32"
 #   endif
 #else
 #   error unknown arch

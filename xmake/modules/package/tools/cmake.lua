@@ -28,6 +28,7 @@ import("lib.detect.find_file")
 import("lib.detect.find_tool")
 import("package.tools.ninja")
 import("detect.sdks.find_emsdk")
+import("private.utils.toolchain", {alias = "toolchain_utils"})
 
 -- get the number of parallel jobs
 function _get_parallel_njobs(opt)
@@ -73,29 +74,10 @@ function _map_linkflags(package, targetkind, sourcekinds, name, values)
     return linker.map_flags(targetkind, sourcekinds, name, values, {target = package})
 end
 
--- is cross compilation?
-function _is_cross_compilation(package)
-    if not package:is_plat(os.subhost()) then
-        return true
-    end
-    if package:is_plat("macosx") and not package:is_arch(os.subarch()) then
-        return true
-    end
-    return false
-end
-
 -- is the toolchain compatible with the host?
 function _is_toolchain_compatible_with_host(package)
-    local toolchains = package:config("toolchains")
-    if toolchains then
-        toolchains = table.wrap(toolchains)
-        if is_host("linux", "macosx", "bsd") then
-            for _, name in ipairs(toolchains) do
-                if name:startswith("clang") or name:startswith("gcc") then
-                    return true
-                end
-            end
-        elseif is_host("windows") and table.contains(toolchains, "msvc") then
+    for _, name in ipairs(package:config("toolchains")) do
+        if toolchain_utils.is_compatible_with_host(name) then
             return true
         end
     end
@@ -440,7 +422,6 @@ function _get_configs_for_mingw(package, configs, opt)
     envs.CMAKE_CXX_COMPILER        = _translate_bin_path(package:build_getenv("cxx"))
     envs.CMAKE_ASM_COMPILER        = _translate_bin_path(package:build_getenv("as"))
     envs.CMAKE_AR                  = _translate_bin_path(package:build_getenv("ar"))
-    envs.CMAKE_LINKER              = _translate_bin_path(package:build_getenv("ld"))
     envs.CMAKE_RANLIB              = _translate_bin_path(package:build_getenv("ranlib"))
     envs.CMAKE_RC_COMPILER         = _translate_bin_path(package:build_getenv("mrc"))
     envs.CMAKE_C_FLAGS             = _get_cflags(package, opt)
@@ -482,8 +463,8 @@ function _get_configs_for_wasm(package, configs, opt)
     local emscripten_cmakefile = find_file("Emscripten.cmake", path.join(emsdk.emscripten, "cmake/Modules/Platform"))
     assert(emscripten_cmakefile, "Emscripten.cmake not found!")
     table.insert(configs, "-DCMAKE_TOOLCHAIN_FILE=" .. emscripten_cmakefile)
-    if is_subhost("windows") then
-        local mingw = assert(package:build_getenv("mingw") or package:build_getenv("sdk"), "mingw not found!")
+    if is_subhost("windows") and opt.cmake_generator ~= "Ninja" then
+        local mingw = assert(package:build_getenv("mingw") or package:build_getenv("sdk"), "mingw32-make not found!")
         table.insert(configs, "-DCMAKE_MAKE_PROGRAM=" .. _translate_paths(path.join(mingw, "bin", "mingw32-make.exe")))
     end
     _get_configs_for_generic(package, configs, opt)
@@ -505,19 +486,27 @@ function _get_configs_for_cross(package, configs, opt)
         local dir = path.directory(cxx)
         local name = path.filename(cxx)
         name = name:gsub("clang$", "clang++")
-        name = name:gsub("clang%-", "clang++-")
+        name = name:gsub("clang%-", "clang++-") -- clang-xx
+        name = name:gsub("clang%.", "clang++.") -- clang.exe
         name = name:gsub("gcc$", "g++")
         name = name:gsub("gcc%-", "g++-")
-        envs.CMAKE_CXX_COMPILER = _translate_bin_path(dir and path.join(dir, name) or name)
+        name = name:gsub("gcc%.", "g++.")
+        if dir and dir ~= "." then
+            cxx = path.join(dir, name)
+        else
+            cxx = name
+        end
+        envs.CMAKE_CXX_COMPILER = _translate_bin_path(cxx)
     end
     -- @note The link command line is set in Modules/CMake{C,CXX,Fortran}Information.cmake and defaults to using the compiler, not CMAKE_LINKER,
     -- so we need set CMAKE_CXX_LINK_EXECUTABLE to use CMAKE_LINKER as linker.
     --
     -- https://github.com/xmake-io/xmake-repo/pull/1039
     -- https://stackoverflow.com/questions/1867745/cmake-use-a-custom-linker/25274328#25274328
-    envs.CMAKE_LINKER              = _translate_bin_path(package:build_getenv("ld"))
+    -- https://github.com/xmake-io/xmake-repo/pull/2134#issuecomment-1573195810
+    local ld = _translate_bin_path(package:build_getenv("ld"))
     if package:has_tool("ld", "gxx", "clangxx") then
-        envs.CMAKE_CXX_LINK_EXECUTABLE = "<CMAKE_LINKER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>"
+        envs.CMAKE_CXX_LINK_EXECUTABLE = ld .. " <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>"
     end
     envs.CMAKE_RANLIB              = _translate_bin_path(package:build_getenv("ranlib"))
     envs.CMAKE_C_FLAGS             = _get_cflags(package, opt)
@@ -529,7 +518,11 @@ function _get_configs_for_cross(package, configs, opt)
     -- we need not set it as cross compilation if we just pass toolchain
     -- https://github.com/xmake-io/xmake/issues/2170
     if not package:is_plat(os.subhost()) then
-        envs.CMAKE_SYSTEM_NAME     = "Linux"
+        local system_name = package:targetos() or "Linux"
+        if system_name == "linux" then
+            system_name = "Linux"
+        end
+        envs.CMAKE_SYSTEM_NAME = system_name
     else
         if package:config("pic") ~= false then
             table.insert(configs, "-DCMAKE_POSITION_INDEPENDENT_CODE=ON")
@@ -570,18 +563,26 @@ function _get_configs_for_host_toolchain(package, configs, opt)
         local name = path.filename(cxx)
         name = name:gsub("clang$", "clang++")
         name = name:gsub("clang%-", "clang++-")
+        name = name:gsub("clang%.", "clang++.")
         name = name:gsub("gcc$", "g++")
         name = name:gsub("gcc%-", "g++-")
-        envs.CMAKE_CXX_COMPILER = _translate_bin_path(dir and path.join(dir, name) or name)
+        name = name:gsub("gcc%.", "g++.")
+        if dir and dir ~= "." then
+            cxx = path.join(dir, name)
+        else
+            cxx = name
+        end
+        envs.CMAKE_CXX_COMPILER = _translate_bin_path(cxx)
     end
     -- @note The link command line is set in Modules/CMake{C,CXX,Fortran}Information.cmake and defaults to using the compiler, not CMAKE_LINKER,
     -- so we need set CMAKE_CXX_LINK_EXECUTABLE to use CMAKE_LINKER as linker.
     --
     -- https://github.com/xmake-io/xmake-repo/pull/1039
     -- https://stackoverflow.com/questions/1867745/cmake-use-a-custom-linker/25274328#25274328
-    envs.CMAKE_LINKER              = _translate_bin_path(package:build_getenv("ld"))
+    -- https://github.com/xmake-io/xmake-repo/pull/2134#issuecomment-1573195810
+    local ld = _translate_bin_path(package:build_getenv("ld"))
     if package:has_tool("ld", "gxx", "clangxx") then
-        envs.CMAKE_CXX_LINK_EXECUTABLE = "<CMAKE_LINKER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>"
+        envs.CMAKE_CXX_LINK_EXECUTABLE = ld .. " <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>"
     end
     envs.CMAKE_RANLIB              = _translate_bin_path(package:build_getenv("ranlib"))
     envs.CMAKE_C_FLAGS             = _get_cflags(package, opt)
@@ -648,12 +649,19 @@ function _get_configs_for_generator(package, configs, opt)
     elseif package:is_plat("mingw") and is_subhost("windows") then
         table.insert(configs, "-G")
         table.insert(configs, "MinGW Makefiles")
-    elseif package:is_plat("windows") then
+    elseif package:is_plat("windows") and not package:config("toolchains") then
         table.insert(configs, "-G")
         table.insert(configs, _get_cmake_generator_for_msvc(package))
     elseif package:is_plat("wasm") and is_subhost("windows") then
+        -- we attempt to use ninja if it exist
+        -- @see https://github.com/xmake-io/xmake/issues/3771
         table.insert(configs, "-G")
-        table.insert(configs, "MinGW Makefiles")
+        if find_tool("ninja") then
+            table.insert(configs, "Ninja")
+            opt.cmake_generator = "Ninja"
+        else
+            table.insert(configs, "MinGW Makefiles")
+        end
     else
         table.insert(configs, "-G")
         table.insert(configs, "Unix Makefiles")
@@ -677,7 +685,7 @@ function _get_configs(package, configs, opt)
     opt._configs_str = string.serialize(configs, {indent = false, strip = true})
     _get_configs_for_install(package, configs, opt)
     _get_configs_for_generator(package, configs, opt)
-    if package:is_plat("windows") then
+    if package:is_plat("windows") and not package:config("toolchains") then
         _get_configs_for_windows(package, configs, opt)
     elseif package:is_plat("android") then
         _get_configs_for_android(package, configs, opt)
@@ -689,7 +697,7 @@ function _get_configs(package, configs, opt)
         _get_configs_for_mingw(package, configs, opt)
     elseif package:is_plat("wasm") then
         _get_configs_for_wasm(package, configs, opt)
-    elseif _is_cross_compilation(package) then
+    elseif package:is_cross() then
         _get_configs_for_cross(package, configs, opt)
     elseif package:config("toolchains") then
         -- we still need find system libraries,
@@ -713,7 +721,7 @@ function buildenvs(package, opt)
     opt = opt or {}
     local envs = {}
     if package:is_plat("windows") then
-        envs = _get_msvc_runenvs(package)
+       -- envs = _get_msvc_runenvs(package)
     end
 
     -- we need pass pkgconf for windows/mingw without msys2/cygwin

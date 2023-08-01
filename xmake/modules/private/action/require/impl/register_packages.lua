@@ -20,6 +20,7 @@
 
 -- imports
 import("core.project.project")
+import("core.cache.localcache")
 
 -- register required package environments
 -- envs: bin path for *.dll, program ..
@@ -129,6 +130,8 @@ end
 
 -- register all required root packages to local cache
 function main(packages)
+
+    -- register to package cache for add_packages()
     for _, instance in ipairs(packages) do
         if instance:is_toplevel() then
             local required_packagename = instance:alias() or instance:name()
@@ -138,5 +141,21 @@ function main(packages)
             end
         end
     end
+
+    -- register references for `xrepo clean`
+    -- and we use glocal memory cache to save all packages from multiple arch/mode, e.g. `xmake project -m "debug,release" -k vsxmake`
+    -- @see https://github.com/xmake-io/xmake/issues/3679
+    local references = _g.references or {}
+    _g.references = references
+    for _, instance in ipairs(packages) do
+        if not instance:is_system() and not instance:is_thirdparty() then
+            local installdir = instance:installdir({readonly = true})
+            if os.isdir(installdir) then
+                table.insert(references, installdir)
+            end
+        end
+    end
+    localcache.set("references", "packages", table.unique(references))
+    localcache.save("references")
 end
 

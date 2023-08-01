@@ -44,14 +44,14 @@ end
 -- /usr/include/c++/11/iostream build/.gens/stl_headerunit/linux/x86_64/release/stlmodules/cache/iostream.gcm
 -- hello build/.gens/stl_headerunit/linux/x86_64/release/rules/modules/cache/hello.gcm
 --
-function _add_module_to_mapper(file, module, bmi)
+function _add_module_to_mapper(file, modulepath, bmi)
     for line in io.lines(file) do
-        if line:startswith(module .. " ") then
+        if line:startswith(modulepath .. " ") then
             return false
         end
     end
     local f = io.open(file, "a")
-    f:print("%s %s", module, bmi)
+    f:print("%s %s", modulepath, bmi)
     f:close()
     return true
 end
@@ -73,8 +73,14 @@ function load(target)
         os.rm(_get_module_mapper(target))
     end
     target:add("cxxflags", {modulesflag, modulemapperflag .. path.translate(_get_module_mapper(target))}, {force = true, expand = false})
-    -- fix cxxabi issue, @see https://github.com/xmake-io/xmake/issues/2716#issuecomment-1225057760
-    target:add("cxxflags", "-D_GLIBCXX_USE_CXX11_ABI=0")
+    -- fix cxxabi issue
+    -- @see https://github.com/xmake-io/xmake/issues/2716#issuecomment-1225057760
+    -- https://github.com/xmake-io/xmake/issues/3855
+    if target:policy("build.c++.gcc.modules.cxx11abi") then
+        target:add("cxxflags", "-D_GLIBCXX_USE_CXX11_ABI=1")
+    else
+        target:add("cxxflags", "-D_GLIBCXX_USE_CXX11_ABI=0")
+    end
 end
 
 -- get includedirs for stl headers
@@ -287,6 +293,7 @@ function generate_user_headerunits_for_batchjobs(target, batchjobs, headerunits,
     -- build headerunits
     local projectdir = os.projectdir()
     for _, headerunit in ipairs(headerunits) do
+        print(headerunit)
         local headerunit_path
         if headerunit.type == ":quote" then
             headerunit_path = path.join(".", path.relative(headerunit.path, projectdir))
@@ -309,7 +316,17 @@ function generate_user_headerunits_for_batchjobs(target, batchjobs, headerunits,
                 -- generate headerunit
                 local args = { "-c" }
                 if headerunit.type == ":quote" then
-                    table.join2(args, { "-I", path.directory(path.relative(headerunit.path, projectdir)), "-x", "c++-user-header", headerunit.name })
+                    local includedir
+                    local p = headerunit.path
+                    if p:endswith(headerunit.name) then
+                        includedir = p:sub(1, #p - #headerunit.name - 1)
+                    else
+                        includedir = path.directory(p)
+                    end
+                    if path.is_absolute(includedir) then
+                        includedir = path.relative(includedir, projectdir)
+                    end
+                    table.join2(args, { "-I", includedir, "-x", "c++-user-header", headerunit.name })
                 elseif headerunit.type == ":angle" then
                     table.join2(args, { "-x", "c++-system-header", headerunit.name })
                 end
@@ -332,7 +349,17 @@ function generate_user_headerunits_for_batchcmds(target, batchcmds, headerunits,
         local flags = {"-c"}
         local headerunit_path
         if headerunit.type == ":quote" then
-            table.join2(flags, {"-I", path(path.relative(headerunit.path, projectdir)):directory(), "-x", "c++-user-header", headerunit.name})
+            local includedir
+            local p = headerunit.path
+            if p:endswith(headerunit.name) then
+                includedir = p:sub(1, #p - #headerunit.name - 1)
+            else
+                includedir = path.directory(p)
+            end
+            if path.is_absolute(includedir) then
+                includedir = path.relative(includedir, projectdir)
+            end
+            table.join2(flags, {"-I", path(includedir), "-x", "c++-user-header", headerunit.name})
             headerunit_path = path.join(".", path.relative(headerunit.path, projectdir))
         elseif headerunit.type == ":angle" then
             table.join2(flags, {"-x", "c++-system-header", headerunit.name})
@@ -390,15 +417,12 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                 local fileconfig = target:fileconfig(cppfile)
                 if fileconfig and fileconfig.install then
                     batchjobs:addjob(name .. "_metafile", function(index, total)
-                        local outputdir = common.get_outputdir(target, cppfile)
-                        local metafilepath = path.join(outputdir, path.filename(cppfile) .. ".meta-info")
+                        local metafilepath = common.get_metafile(target, cppfile)
                         depend.on_changed(function()
                             progress.show((index * 100) / total, "${color.build.object}generating.module.metadata %s", name)
                             local metadata = common.generate_meta_module_info(target, name, cppfile, module.requires)
                             json.savefile(metafilepath, metadata)
-
                         end, {dependfile = target:dependfile(metafilepath), files = {cppfile}})
-
                     end, {rootjob = opt.rootjob})
                 end
             end

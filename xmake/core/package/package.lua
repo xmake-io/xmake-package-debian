@@ -88,7 +88,15 @@ end
 -- get the package configuration
 function _instance:get(name)
     local value = self._INFO:get(name)
-    if value == nil and self:base() then
+    if name == "configs" then
+        -- we need merge it, because current builtin configs always exists
+        if self:base() then
+            local configs_base = self:base():get("configs")
+            if configs_base then
+                value = table.unique(table.join(value or {}, configs_base))
+            end
+        end
+    elseif value == nil and self:base() then
         value = self:base():get(name)
     end
     if value ~= nil then
@@ -204,7 +212,7 @@ end
 -- the current platform is belong to the given platforms?
 function _instance:is_plat(...)
     local plat = self:plat()
-    for _, v in ipairs(table.join(...)) do
+    for _, v in ipairs(table.pack(...)) do
         if v and plat == v then
             return true
         end
@@ -214,7 +222,7 @@ end
 -- the current architecture is belong to the given architectures?
 function _instance:is_arch(...)
     local arch = self:arch()
-    for _, v in ipairs(table.join(...)) do
+    for _, v in ipairs(table.pack(...)) do
         if v and arch:find("^" .. v:gsub("%-", "%%-") .. "$") then
             return true
         end
@@ -239,7 +247,7 @@ end
 -- the current architecture is belong to the given target architectures?
 function _instance:is_targetarch(...)
     local targetarch = self:targetarch()
-    for _, v in ipairs(table.join(...)) do
+    for _, v in ipairs(table.pack(...)) do
         if v and targetarch:find("^" .. v:gsub("%-", "%%-") .. "$") then
             return true
         end
@@ -911,7 +919,7 @@ function _instance:manifest_save()
     end
 
     -- save manifest
-    local ok, errors = io.save(self:manifest_file(), manifest)
+    local ok, errors = io.save(self:manifest_file(), manifest, { orderkeys = true })
     if not ok then
         os.raise(errors)
     end
@@ -1299,10 +1307,6 @@ function _instance:config(name)
     if configs then
         value = configs[name]
     end
-    -- we cannot get it from `self:get()`, because there are always some builtin configs.
-    if value == nil and self:base() then
-        value = self:base():config(name)
-    end
     return value
 end
 
@@ -1541,6 +1545,7 @@ function _instance:_fetch_tool(opt)
             fetchinfo = self:find_tool(self:name(), {require_version = opt.require_version,
                                                      cachekey = "fetch_package_xmake",
                                                      norun = true, -- we need not run it to check for xmake/packages, @see https://github.com/xmake-io/xmake-repo/issues/66
+                                                     system = false, -- we only find it from xmake/packages, @see https://github.com/xmake-io/xmake-repo/pull/2085
                                                      force = opt.force})
 
             -- may be toolset, not single tool
@@ -1637,6 +1642,7 @@ function _instance:find_tool(name, opt)
                                   version = true, -- we alway check version
                                   require_version = opt.require_version,
                                   norun = opt.norun,
+                                  system = opt.system,
                                   force = opt.force})
 end
 

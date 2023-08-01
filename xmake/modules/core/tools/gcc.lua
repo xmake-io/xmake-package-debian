@@ -276,7 +276,11 @@ end
 
 -- make the link flag
 function nf_link(self, lib)
-    return "-l" .. lib
+    if lib:endswith(".a") or lib:endswith(".so") or lib:endswith(".dylib") or lib:endswith(".lib") then
+        return lib
+    else
+        return "-l" .. lib
+    end
 end
 
 -- make the syslink flag
@@ -331,7 +335,7 @@ end
 
 -- make the c precompiled header flag
 function nf_pcheader(self, pcheaderfile, target)
-    if self:kind() == "cc" or self:kind() == "mm" then
+    if self:kind() == "cc" then
         local pcoutputfile = target:pcoutputfile("c")
         if self:name() == "clang" then
             return {"-include", pcheaderfile, "-include-pch", pcoutputfile}
@@ -343,8 +347,32 @@ end
 
 -- make the c++ precompiled header flag
 function nf_pcxxheader(self, pcheaderfile, target)
-    if self:kind() == "cxx" or self:kind() == "mxx" then
+    if self:kind() == "cxx" then
         local pcoutputfile = target:pcoutputfile("cxx")
+        if self:name() == "clang" then
+            return {"-include", pcheaderfile, "-include-pch", pcoutputfile}
+        else
+            return {"-include", path.filename(pcheaderfile), "-I", path.directory(pcoutputfile)}
+        end
+    end
+end
+
+-- make the objc precompiled header flag
+function nf_pmheader(self, pcheaderfile, target)
+    if self:kind() == "mm" then
+        local pcoutputfile = target:pcoutputfile("m")
+        if self:name() == "clang" then
+            return {"-include", pcheaderfile, "-include-pch", pcoutputfile}
+        else
+            return {"-include", path.filename(pcheaderfile), "-I", path.directory(pcoutputfile)}
+        end
+    end
+end
+
+-- make the objc++ precompiled header flag
+function nf_pmxxheader(self, pcheaderfile, target)
+    if self:kind() == "mxx" then
+        local pcoutputfile = target:pcoutputfile("mxx")
         if self:name() == "clang" then
             return {"-include", pcheaderfile, "-include-pch", pcoutputfile}
         else
@@ -627,6 +655,9 @@ function _compargv_pch(self, pcheaderfile, pcoutputfile, flags)
     if self:kind() == "cxx" then
         table.insert(pchflags, "-x")
         table.insert(pchflags, "c++-header")
+    elseif self:kind() == "mxx" then
+        table.insert(pchflags, "-x")
+        table.insert(pchflags, "objective-c++-header")
     end
 
     -- make the compile arguments list

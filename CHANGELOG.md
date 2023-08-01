@@ -2,6 +2,58 @@
 
 ## master (unreleased)
 
+## v2.8.1
+
+### New features
+
+* [#3821](https://github.com/xmake-io/xmake/pull/3821): Add longpath option for windows installer
+* [#3828](https://github.com/xmake-io/xmake/pull/3828): Add support for zypper package manager
+* [#3871](https://github.com/xmake-io/xmake/issues/3871): Improve tools.msbuild to support for upgrading vsproj
+* [#3148](https://github.com/xmake-io/xmake/issues/3148): Support grpc for protobuf
+* [#3889](https://github.com/xmake-io/xmake/issues/3889): Support to add library path for add_links
+* [#3912](https://github.com/orgs/xmake-io/issues/3912): Add set_pmxxheader to support objc precompiled header
+* add_links support library file path
+
+### Changes
+
+* [#3752](https://github.com/xmake-io/xmake/issues/3752): Improve os.getenvs for windows
+* [#3371](https://github.com/xmake-io/xmake/issues/3371): Improve tools.cmake to support ninja generator for wasm
+* [#3777](https://github.com/xmake-io/xmake/issues/3777): Improve to find package from pkg-config
+* [#3815](https://github.com/xmake-io/xmake/pull/3815): Improve tools.xmake to pass toolchains for windows
+* [#3857](https://github.com/xmake-io/xmake/issues/3857): Improve to generate compile_commands.json
+* [#3892](https://github.com/xmake-io/xmake/issues/3892): Improve to search packages from description
+* [#3916](https://github.com/xmake-io/xmake/issues/3916): Improve to build swift program, support for multiple modules
+* Update lua runtime to 5.4.6
+
+### Bugs fixed
+
+* [#3755](https://github.com/xmake-io/xmake/pull/3755): Fix find_tool from xmake/packages
+* [#3787](https://github.com/xmake-io/xmake/issues/3787): Fix packages from conan 2.x
+* [#3839](https://github.com/orgs/xmake-io/discussions/3839): Fix vs_runtime for conan 2.x
+
+## v2.7.9
+
+### New features
+
+* [#3613](https://github.com/xmake-io/xmake/issues/3613): Add `wasm.preloadfiles` configuration for wasm
+* [#3703](https://github.com/xmake-io/xmake/pull/3703): Support for conan >=2.0.5
+
+### Changes
+
+* [#3669](https://github.com/xmake-io/xmake/issues/3669): Improve cmake generator to support add_cxflags with the given tool
+* [#3679](https://github.com/xmake-io/xmake/issues/3679): Improve `xrepo clean`
+* [#3662](https://github.com/xmake-io/xmake/issues/3662): Improve cmake/make generator for lex/yacc project
+* [#3697](https://github.com/xmake-io/xmake/issues/3662): Improve trybuild/cmake
+* [#3730](https://github.com/xmake-io/xmake/issues/3730): Improve c++modules package installation
+
+### Bugs fixed
+
+* [#3596](https://github.com/xmake-io/xmake/issues/3596): Fix check_cxxfuncs and check_cxxsnippets
+* [#3603](https://github.com/xmake-io/xmake/issues/3603): Fix `xmake update`
+* [#3614](https://github.com/xmake-io/xmake/issues/3614): Fix qt envirnoment when running target
+* [#3628](https://github.com/xmake-io/xmake/issues/3628): Fix msys2/mingw setenv and os.exec issue
+* Fix setenv for msys/mingw
+
 ## v2.7.8
 
 ### New features
@@ -1555,6 +1607,58 @@
 # 更新日志
 
 ## master (开发中)
+
+## v2.8.1
+
+### 新特性
+
+* [#3821](https://github.com/xmake-io/xmake/pull/3821): windows 安装器添加长路径支持选项
+* [#3828](https://github.com/xmake-io/xmake/pull/3828): 添加 zypper 包管理器支持
+* [#3871](https://github.com/xmake-io/xmake/issues/3871): 改进 tools.msbuild 支持对 vsproj 进行自动升级
+* [#3148](https://github.com/xmake-io/xmake/issues/3148): 改进 protobuf 支持 grpc
+* [#3889](https://github.com/xmake-io/xmake/issues/3889): add_links 支持库路径添加
+* [#3912](https://github.com/orgs/xmake-io/issues/3912): 添加 set_pmxxheader 去支持 objc 预编译头
+* add_links 支持库文件路径
+
+### 改进
+
+* [#3752](https://github.com/xmake-io/xmake/issues/3752): 改进 windows 上 os.getenvs 的获取
+* [#3371](https://github.com/xmake-io/xmake/issues/3371): 改进 tools.cmake 支持使用 ninja 去构建 wasm 包
+* [#3777](https://github.com/xmake-io/xmake/issues/3777): 改进从 pkg-config 中查找包
+* [#3815](https://github.com/xmake-io/xmake/pull/3815): 改进 tools.xmake 支持为 windows 平台传递工具链
+* [#3857](https://github.com/xmake-io/xmake/issues/3857): 改进生成 compile_commands.json
+* [#3892](https://github.com/xmake-io/xmake/issues/3892): 改进包搜索，支持从描述中找包
+* [#3916](https://github.com/xmake-io/xmake/issues/3916): 改进构建 swift 程序，支持模块间符号调用
+* 更新 lua 运行时到 5.4.6
+
+### Bugs 修复
+
+* [#3755](https://github.com/xmake-io/xmake/pull/3755): 修复 find_tool 从 xmake/packages 中查找程序
+* [#3787](https://github.com/xmake-io/xmake/issues/3787): 修复从 conan 2.x 中使用包
+* [#3839](https://github.com/orgs/xmake-io/discussions/3839): 修复 conan 2.x 包的 vs_runtime 设置
+
+## v2.7.9
+
+### 新特性
+
+* [#3613](https://github.com/xmake-io/xmake/issues/3613): 添加 `wasm.preloadfiles` 扩展配置
+* [#3703](https://github.com/xmake-io/xmake/pull/3703): 支持 conan >=2.0.5
+
+### 改进
+
+* [#3669](https://github.com/xmake-io/xmake/issues/3669): 改进 cmake 生成器支持特定工具的 cxflags
+* [#3679](https://github.com/xmake-io/xmake/issues/3679): 改进 `xrepo clean`
+* [#3662](https://github.com/xmake-io/xmake/issues/3662): 改进 cmake/make 生成器去更好的支持 lex/yacc 工程
+* [#3697](https://github.com/xmake-io/xmake/issues/3662): 改进 trybuild/cmake
+* [#3730](https://github.com/xmake-io/xmake/issues/3730): 改进 c++modules 包安装，解决不同目录同名文件分发冲突问题
+
+### Bugs 修复
+
+* [#3596](https://github.com/xmake-io/xmake/issues/3596): 修复 check_cxxfuncs 和 check_cxxsnippets
+* [#3603](https://github.com/xmake-io/xmake/issues/3603): 修复 xmake update 的无效 url
+* [#3614](https://github.com/xmake-io/xmake/issues/3614): 修复 xmake run 对 Qt 环境的加载
+* [#3628](https://github.com/xmake-io/xmake/issues/3628): 修复 msys2/mingw 下 os.exec 总是优先查找错误的可执行程序
+* 修复 msys/mingw 下环境变量设置问题
 
 ## v2.7.8
 
