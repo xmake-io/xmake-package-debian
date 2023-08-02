@@ -1,0 +1,26 @@
+Description: Add shebang to executables
+Author: Lance Lin <lq27267@gmail.com>
+Forwarded: no
+Date: 01 Aug 2023
+
+--- a/xmake/scripts/completions/register-completions.bash
++++ b/xmake/scripts/completions/register-completions.bash
+@@ -1,3 +1,4 @@
++#!/bin/bash
+ # A cross-platform build utility based on Lua
+ #
+ # Licensed under the Apache License, Version 2.0 (the "License");
+--- a/xmake/scripts/completions/register-completions.fish
++++ b/xmake/scripts/completions/register-completions.fish
+@@ -1,3 +1,4 @@
++#!/usr/bin/env fish
+ # A cross-platform build utility based on Lua
+ #
+ # Licensed under the Apache License, Version 2.0 (the "License");
+--- a/xmake/scripts/completions/register-completions.zsh
++++ b/xmake/scripts/completions/register-completions.zsh
+@@ -1,3 +1,4 @@
++#!/bin/zsh
+ # A cross-platform build utility based on Lua
+ #
+ # Licensed under the Apache License, Version 2.0 (the "License");

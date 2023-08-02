@@ -1,0 +1,13 @@
+Description: Replace unusual interpreter
+Author: Lance Lin <lq27267@gmail.com>
+Forwarded: no
+Date: 01 Aug 2023
+
+--- a/xmake/scripts/conan/extensions/generators/xmake_generator.py
++++ b/xmake/scripts/conan/extensions/generators/xmake_generator.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/python3
+ # -*- coding: utf-8 -*-
+ 
+ from conan import ConanFile
