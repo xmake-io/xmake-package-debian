@@ -1,0 +1,66 @@
+#!/usr/bin/make -f
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+# prefix
+prefix=$(CURDIR)/debian/xmake/usr
+
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+	touch configure-stamp
+
+build: build-stamp
+build-stamp: configure-stamp
+	dh_testdir
+	./configure
+	make
+	touch $@
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp configure-stamp
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k
+	dh_installdirs
+	mkdir -p $(prefix)/bin
+	mkdir -p $(prefix)/share
+	cp -r $(CURDIR)/xmake $(prefix)/share
+	cp -p $(CURDIR)/build/xmake $(prefix)/bin/xmake
+	chmod 755 $(prefix)/bin/xmake
+	cp -p $(CURDIR)/scripts/xrepo.sh $(prefix)/bin/xrepo
+	chmod 755 $(prefix)/bin/xrepo
+
+distclean: clean
+
+uninstall:
+	if [ -f /usr/bin/xmake ]; then rm /usr/bin/xmake; fi
+	if [ -f /usr/bin/xrepo ]; then rm /usr/bin/xrepo; fi
+	if [ -d /usr/share/xmake ]; then rm -rf /usr/share/xmake; fi
+
+binary-indep: build install
+# We have nothing to do by default.
+# # Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installchangelogs $(CURDIR)/CHANGELOG.md
+	dh_installdocs
+	dh_installexamples
+	dh_installman
+	dh_link
+	dh_strip
+	dh_compress
+	dh_fixperms
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install uninstall configure
