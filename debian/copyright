@@ -3,6 +3,7 @@ Upstream-Name: xmake
 Upstream-Contact: ruki <waruqi@gmail.com>
 Source: https://github.com/xmake-io/xmake
 Files-Excluded: core/src/luajit/luajit/autogen
+                xmake/plugins/project/vsxmake/vsproj/templates/sln/vsxmake.sln
 
 Files: *
 Copyright: 2015-2022 ruki <waruqi@gmail.com>
@@ -13,16 +14,13 @@ Files: core/src/xxhash/xxhash/*
 Copyright: 2012-2021 Yann Collet
 License: BSD-2-clause
 
-Files: scripts/termux/build.sh
-Copyright: Ruki Wang
-License: GPL-2
-
 Files: xmake/scripts/gas-preprocessor.pl
 Copyright: David Conrad
 License: GPL-2+
 
 Files: debian/*
 Copyright: 2022 Yangfl <mmyangfl@gmail.com>
+           2023 Lance Lin <lq27267@gmail.com>
 License: Apache-2
 
 License: Apache-2
