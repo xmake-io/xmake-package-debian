@@ -1,0 +1,3 @@
+fix_typos_in_manpages.patch
+add_shebang_to_executables.patch
+replace_unusual_interpreter.patch
