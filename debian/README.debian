@@ -1,0 +1,63 @@
+Below is a listing of previous changelog entries in salsa of unreleased
+versions of xmake before initial upload for Debian. This file exists to show
+recognition to Ruki Wang, Yangfl, and Lance Lin for their hard work in preparing
+this package for Debian.
+
+xmake (2.8.1+ds-1) unstable; urgency=medium
+
+  * d/copyright: Remove superfluous file pattern
+                 Remove 'autogen' from Files-Excluded
+                 Add windows devel file to Files-Excluded
+                 Update year to 2023 for debian/*
+  * d/control: Update standards version to 4.6.2
+  * d/watch: Add in repack suffix
+  * d/rules: Make update-script.sh executable, additional configure options
+  * d/xmake.examples: Install examples folders
+  * d/xmake-data.lintian-overrides: Ignore missing dep for interpreters that
+    are in duplicate script files
+  * d/patches: Patch typos in manpages, patch missing shebangs in executables,
+    and patch unusual interpreter
+
+ -- Lance Lin <lq27267@gmail.com>  Tue, 01 Aug 2023 22:30:16 +0700
+
+xmake (2.8.1-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Ruki Wang <waruqi@gmail.com>  Tue, 1 Aug 2023 09:55:37 +0800
+
+xmake (2.7.8-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Ruki Wang <waruqi@gmail.com>  Thu, 6 Apr 2023 09:00:37 +0800
+
+xmake (2.7.7-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Ruki Wang <waruqi@gmail.com>  Fri, 24 Feb 2023 22:35:37 +0800
+
+xmake (2.7.6-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Ruki Wang <waruqi@gmail.com>  Fri, 27 Jan 2023 16:30:37 +0800
+
+xmake (2.7.5-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Ruki Wang <waruqi@gmail.com>  Fri, 06 Jan 2023 10:44:37 +0800
+
+xmake (2.7.4-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Ruki Wang <waruqi@gmail.com>  Sat, 24 Dec 2022 23:44:37 +0800
+
+xmake (2.7.3+dfsg-1) unstable; urgency=medium
+
+  * Initial release (Closes: #986736)
+
+ -- Yangfl <mmyangfl@gmail.com>  Thu, 08 Dec 2022 10:44:37 +0800
