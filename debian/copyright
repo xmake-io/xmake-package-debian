@@ -2,8 +2,7 @@ Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: xmake
 Upstream-Contact: ruki <waruqi@gmail.com>
 Source: https://github.com/xmake-io/xmake
-Files-Excluded: core/src/luajit/luajit/autogen
-                xmake/plugins/project/vsxmake/vsproj/templates/sln/vsxmake.sln
+Files-Excluded: xmake/plugins/project/vsxmake/vsproj/templates/sln/vsxmake.sln
 
 Files: *
 Copyright: 2015-2022 ruki <waruqi@gmail.com>
