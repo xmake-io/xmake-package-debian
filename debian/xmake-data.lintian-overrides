@@ -1,3 +1,0 @@
-# Duplicate files for different interpreters can be ignored
-xmake-data: missing-dep-for-interpreter /bin/zsh (does not satisfy zsh:any | zsh-beta:any) [usr/share/xmake/scripts/completions/register-completions.zsh]
-xmake-data: missing-dep-for-interpreter fish (does not satisfy fish:any) [usr/share/xmake/scripts/completions/register-completions.fish]
