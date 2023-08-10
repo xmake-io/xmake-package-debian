@@ -11,12 +11,10 @@ xmake (2.8.1+ds-1) unstable; urgency=medium
                  Update year to 2023 for debian/*
   * d/control: Update standards version to 4.6.2
   * d/watch: Add in repack suffix
-  * d/rules: Make update-script.sh executable, additional configure options
+  * d/rules: Make update-script.sh executable, remove executable permissions from
+    register-completions scripts, and additional configure options
   * d/xmake.examples: Install examples folders
-  * d/xmake-data.lintian-overrides: Ignore missing dep for interpreters that
-    are in duplicate script files
-  * d/patches: Patch typos in manpages, patch missing shebangs in executables,
-    and patch unusual interpreter
+  * d/patches: Patch typos in manpages and patch unusual interpreter
 
  -- Lance Lin <lq27267@gmail.com>  Tue, 01 Aug 2023 22:30:16 +0700
 
