@@ -1,0 +1,41 @@
+#!/bin/sh
+
+export XMAKE_ROOT=y
+
+cd "$AUTOPKGTEST_TMP"
+
+which xmake
+
+# Test basic help functionality
+xmake -h
+
+# Test running lua code
+xmake l -c "print('hello xmake!')"
+
+# Test new project creation
+mkdir hello
+xmake create hello
+ls -la hello/xmake.lua
+
+# Test building the project
+cd hello
+xmake
+ls -la build
+
+# Test running the target
+xmake run hello
+
+# Test showing project details
+xmake show
+
+# Test installing target
+xmake i hello
+ls -la /usr/local/bin/hello
+
+# Test creating documentation for the project
+xmake doxygen
+ls -la build/html/index.html
+
+# Test cleaning project
+xmake clean
+
