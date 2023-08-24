@@ -6,7 +6,10 @@ Build-Depends:
  debhelper-compat (= 13),
 Build-Depends-Arch:
  pkg-config,
+ lua-cjson,
+ libxxhash-dev,
  liblua5.4-dev,
+ libluajit-5.1-dev,
  liblz4-dev,
  libsv-dev,
  libtbox-dev,
@@ -22,6 +25,8 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  xmake-data (>= ${source:Version}),
+Recommends:
+ doxygen,
 Description: cross-platform build utility based on Lua
  xmake is a lightweight cross-platform build utility based on Lua. It uses
  xmake.lua to maintain project builds. Compared with makefile/CMakeLists.txt,
