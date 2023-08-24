@@ -1,0 +1,16 @@
+Description: Fix sed on forward slashes
+Author: Lance Lin <lq27267@gmail.com>
+Forwarded: no
+Date: 23 Aug 2023
+
+--- a/configure
++++ b/configure
+@@ -3665,7 +3665,7 @@
+ _replace_configvar_value() {
+     local name="${1}"
+     local value="${2}"
+-    _ret="s/\${${name}}/${value}/g"
++    _ret="s@\${${name}}@${value}@g"
+ }
+ 
+ # generate configfile for the given target

@@ -1,0 +1,84 @@
+Description: Convert local source to external dependencies 
+Author: Lance Lin <lq27267@gmail.com>
+Forwarded: no
+Date: 21 Aug 2023
+
+--- a/core/src/xmake/prefix.h
++++ b/core/src/xmake/prefix.h
+@@ -25,7 +25,7 @@
+  * includes
+  */
+ #include "prefix/prefix.h"
+-#include "luaconf.h"
++#include <luaconf.h>
+ #if defined(TB_CONFIG_OS_WINDOWS) && defined(__cplusplus)
+ #   undef LUA_API
+ #   undef LUALIB_API
+@@ -33,13 +33,13 @@
+ #   define LUALIB_API	LUA_API
+ #endif
+ #ifdef USE_LUAJIT
+-#   include "luajit.h"
+-#   include "lualib.h"
+-#   include "lauxlib.h"
++#   include <luajit.h>
++#   include <lualib.h>
++#   include <lauxlib.h>
+ #else
+-#   include "lua.h"
+-#   include "lualib.h"
+-#   include "lauxlib.h"
++#   include <lua.h>
++#   include <lualib.h>
++#   include <lauxlib.h>
+ #endif
+ 
+ /* //////////////////////////////////////////////////////////////////////////////////////
+--- a/core/xmake.sh
++++ b/core/xmake.sh
+@@ -206,16 +206,5 @@
+ }
+ 
+ # add projects
+-if ! has_config "external"; then
+-    if is_config "runtime" "luajit"; then
+-        includes "src/luajit"
+-    else
+-        includes "src/lua"
+-    fi
+-    includes "src/lua-cjson"
+-    includes "src/lz4"
+-    includes "src/sv"
+-    includes "src/tbox"
+-fi
+ includes "src/xmake"
+ includes "src/demo"
+--- a/core/xmake.lua
++++ b/core/xmake.lua
+@@ -99,15 +99,6 @@
+ end
+ 
+ -- add projects
+-includes("src/sv", "src/lz4", "src/tbox", "src/xmake", "src/demo")
+-if has_config("lua_cjson") then
+-    includes("src/lua-cjson")
+-end
+-if is_config("runtime", "luajit") then
+-    includes("src/luajit")
+-else
+-    includes("src/lua")
+-end
+ if is_plat("windows") then
+     includes("src/pdcurses")
+ end
+--- a/core/src/xmake/hash/xxhash.c
++++ b/core/src/xmake/hash/xxhash.c
+@@ -32,7 +32,7 @@
+ #define XXH_NAMESPACE XM_
+ #define XXH_STATIC_LINKING_ONLY
+ #define XXH_IMPLEMENTATION
+-#include "xxhash/xxhash.h"
++#include <xxhash.h>
+ 
+ /* //////////////////////////////////////////////////////////////////////////////////////
+  * implementation
