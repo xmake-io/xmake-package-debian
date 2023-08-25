@@ -13,7 +13,6 @@ xmake -h
 xmake l -c "print('hello xmake!')"
 
 # Test new project creation
-mkdir hello
 xmake create hello
 ls -la hello/xmake.lua
 
