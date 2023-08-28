@@ -1,7 +1,7 @@
 Source: xmake
 Section: devel
 Priority: optional
-Maintainer: Ruki Wang <waruqi@gmail.com>
+Maintainer: Lance Lin <lq27267@gmail.com>
 Build-Depends:
  debhelper-compat (= 13),
 Build-Depends-Arch:
