@@ -1,5 +1,5 @@
-xmake (2.8.1+ds-1) unstable; urgency=medium
+xmake (2.8.2+ds-1) unstable; urgency=medium
 
-  * Initial release (Closes: #986736)
+  * Initial release (Closes: #986736).
 
- -- Lance Lin <lq27267@gmail.com>  Tue, 01 Aug 2023 22:30:16 +0700
+ -- Lance Lin <lq27267@gmail.com>  Mon, 28 Aug 2023 20:28:20 +0700
