@@ -3,6 +3,13 @@ versions of xmake before initial upload for Debian. This file exists to show
 recognition to Ruki Wang, Yangfl, and Lance Lin for their hard work in preparing
 this package for Debian.
 
+xmake (2.8.2+ds-1) unstable; urgency=medium
+
+  * d/rules: Remove permission change for register-completions scripts, fixed
+    in upstream
+
+ -- Lance Lin <lq27267@gmail.com>  Mon, 28 Aug 2023 20:28:20 +0700
+
 xmake (2.8.1+ds-1) unstable; urgency=medium
 
   * d/copyright: Remove superfluous file pattern, remove 'autogen' from
