@@ -467,7 +467,8 @@ end
 function _add_target_include_directories(cmakelists, target, outputdir)
     local includedirs = _get_configs_from_target(target, "includedirs")
     if #includedirs > 0 then
-        cmakelists:print("target_include_directories(%s PRIVATE", target:name())
+        local access_type = target:kind() == "headeronly" and "INTERFACE" or "PRIVATE"
+        cmakelists:print("target_include_directories(%s %s", target:name(), access_type)
         for _, includedir in ipairs(includedirs) do
             cmakelists:print("    " .. _get_relative_unix_path(includedir, outputdir))
         end
@@ -480,11 +481,6 @@ function _add_target_include_directories(cmakelists, target, outputdir)
             cmakelists:print("    " .. _get_relative_unix_path(headerdir, outputdir))
         end
         cmakelists:print(")")
-    end
-    -- export config header directory (deprecated)
-    local configheader = target:configheader()
-    if configheader then
-        cmakelists:print("target_include_directories(%s PUBLIC %s)", target:name(), _get_relative_unix_path(path.directory(configheader), outputdir))
     end
 end
 
@@ -678,16 +674,20 @@ function _add_target_exceptions(cmakelists, target)
     }
     local exceptions = target:get("exceptions")
     if exceptions then
-        cmakelists:print("if(MSVC)")
-        -- msvc or clang-cl
-        for _, exception in ipairs(exceptions) do
-            cmakelists:print("    target_compile_options(%s PRIVATE %s)", target:name(), flags_msvc[exception])
+        if exceptions == "none" then
+            cmakelists:print("string(REPLACE \"/EHsc\" \"\" CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS}\")")
+        else
+            cmakelists:print("if(MSVC)")
+            -- msvc or clang-cl
+            for _, exception in ipairs(exceptions) do
+                cmakelists:print("    target_compile_options(%s PRIVATE %s)", target:name(), flags_msvc[exception])
+            end
+            cmakelists:print("else()")
+            for _, exception in ipairs(exceptions) do
+                cmakelists:print("    target_compile_options(%s PRIVATE %s)", target:name(), flags_gcc[exception])
+            end
+            cmakelists:print("endif()")
         end
-        cmakelists:print("else()")
-        for _, exception in ipairs(exceptions) do
-            cmakelists:print("    target_compile_options(%s PRIVATE %s)", target:name(), flags_gcc[exception])
-        end
-        cmakelists:print("endif()")
     end
 end
 
@@ -951,7 +951,7 @@ function _add_target_custom_commands_for_batchcmds(cmakelists, target, outputdir
     end
     if suffix == "before" then
         -- ADD_CUSTOM_COMMAND and PRE_BUILD did not work as I expected,
-        -- so we need use add_dependencies and fake target to support it.
+        -- so we need to use add_dependencies and fake target to support it.
         --
         -- @see https://gitlab.kitware.com/cmake/cmake/-/issues/17802
         --
@@ -1005,21 +1005,6 @@ function _add_target_custom_commands(cmakelists, target, outputdir)
     _add_target_custom_commands_for_batchcmds(cmakelists, target, outputdir, "after", cmds_after)
 end
 
--- TODO export target headers (deprecated)
-function _export_target_headers(target)
-    local srcheaders, dstheaders = target:headers()
-    if srcheaders and dstheaders then
-        local i = 1
-        for _, srcheader in ipairs(srcheaders) do
-            local dstheader = dstheaders[i]
-            if dstheader then
-                os.cp(srcheader, dstheader)
-            end
-            i = i + 1
-        end
-    end
-end
-
 -- add target
 function _add_target(cmakelists, target, outputdir)
 
@@ -1044,14 +1029,11 @@ function _add_target(cmakelists, target, outputdir)
         raise("unknown target kind %s", target:kind())
     end
 
-    -- TODO export target headers (deprecated)
-    _export_target_headers(target)
-
     -- add target dependencies
     _add_target_dependencies(cmakelists, target)
 
     -- add target custom commands
-    -- we need call it first for running all rules, these rules will change some flags, e.g. c++modules
+    -- we need to call it first for running all rules, these rules will change some flags, e.g. c++modules
     _add_target_custom_commands(cmakelists, target, outputdir)
 
     -- add target precompilied header

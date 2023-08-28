@@ -89,7 +89,7 @@ end
 function _instance:get(name)
     local value = self._INFO:get(name)
     if name == "configs" then
-        -- we need merge it, because current builtin configs always exists
+        -- we need to merge it, because current builtin configs always exists
         if self:base() then
             local configs_base = self:base():get("configs")
             if configs_base then
@@ -466,7 +466,7 @@ function _instance:sourcehash(url_alias)
         if not sourcehash then
             sourcehash = versions[version_str]
         end
-        if sourcehash then
+        if sourcehash and #sourcehash == 40 then
             sourcehash = sourcehash:lower()
         end
         return sourcehash
@@ -555,7 +555,7 @@ function _instance:is_system()
 end
 
 -- is the third-party package? e.g. brew::pcre2/libpcre2-8, conan::OpenSSL/1.0.2n@conan/stable
--- we need install and find package by third-party package manager directly
+-- we need to install and find package by third-party package manager directly
 --
 function _instance:is_thirdparty()
     return self._is_thirdparty
@@ -1066,7 +1066,7 @@ function _instance:build_envs(lazy_loading)
         for _, opt in ipairs(table.join(language_menu.options("config"), platform_menu.options("config"))) do
             local optname = opt[2]
             if type(optname) == "string" then
-                -- we need only index it to force load it's value
+                -- we only need to index it to force load it's value
                 local value = build_envs[optname]
             end
         end
@@ -1544,7 +1544,7 @@ function _instance:_fetch_tool(opt)
         else
             fetchinfo = self:find_tool(self:name(), {require_version = opt.require_version,
                                                      cachekey = "fetch_package_xmake",
-                                                     norun = true, -- we need not run it to check for xmake/packages, @see https://github.com/xmake-io/xmake-repo/issues/66
+                                                     norun = true, -- we don't need to run it to check for xmake/packages, @see https://github.com/xmake-io/xmake-repo/issues/66
                                                      system = false, -- we only find it from xmake/packages, @see https://github.com/xmake-io/xmake-repo/pull/2085
                                                      force = opt.force})
 
@@ -1713,7 +1713,7 @@ function _instance:fetch(opt)
         -- @see https://github.com/xmake-io/xmake/issues/726
         system = nil
     elseif self:is_cross() then
-        -- we need disable system package for cross-compilation
+        -- we need to disable system package for cross-compilation
         system = false
     end
 
@@ -1767,7 +1767,7 @@ function _instance:fetch(opt)
     -- save to cache
     self._FETCHINFO = fetchinfo
 
-    -- we need update the real version if it's system package
+    -- we need to update the real version if it's system package
     -- @see https://github.com/xmake-io/xmake/issues/3333
     if is_system and fetchinfo and fetchinfo.version then
         local fetch_version = semver.new(fetchinfo.version)
@@ -2086,6 +2086,19 @@ function _instance:_generate_build_configs(configs, opt)
     if opt.sourcekind == "cxx" and configs.exceptions == nil and self:has_tool("cxx", "cl") then
         configs.exceptions = "cxx"
     end
+
+    -- pass user flags to on_test, because some flags need be passed to ldflags in on_test
+    -- e.g. add_requireconfs("**", {configs = {cxflags = "/fsanitize=address", ldflags = "/fsanitize=address"}})
+    --
+    -- @see https://github.com/xmake-io/xmake/issues/4046
+    --
+    for name, flags in pairs(self:configs()) do
+        if name:endswith("flags") and self:extraconf("configs", name, "builtin") then
+            configs[name] = table.wrap(configs[name] or {})
+            table.join2(configs[name], flags)
+        end
+    end
+
     if configs and (configs.ldflags or configs.shflags) then
         configs.force = {ldflags = configs.ldflags, shflags = configs.shflags}
         configs.ldflags = nil
@@ -2585,7 +2598,7 @@ function package.load_from_repository(packagename, packagedir, opt)
     -- get interpreter
     local interp = package._interpreter()
 
-    -- we need modify plat/arch in description scope at same time
+    -- we need to modify plat/arch in description scope at same time
     -- if plat/arch are passed to add_requires.
     --
     -- @see https://github.com/orgs/xmake-io/discussions/3439

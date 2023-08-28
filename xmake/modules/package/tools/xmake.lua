@@ -198,6 +198,7 @@ function _get_configs(package, configs, opt)
     local cxxflags = table.join(table.wrap(package:config("cxxflags")), get_config("cxxflags"))
     local asflags  = table.join(table.wrap(package:config("asflags")),  get_config("asflags"))
     local ldflags  = table.join(table.wrap(package:config("ldflags")),  get_config("ldflags"))
+    local shflags  = table.join(table.wrap(package:config("shflags")),  get_config("shflags"))
     table.insert(configs, "--plat=" .. package:plat())
     table.insert(configs, "--arch=" .. package:arch())
     if configs.mode == nil then
@@ -266,6 +267,9 @@ function _get_configs(package, configs, opt)
     if ldflags and #ldflags > 0 then
         table.insert(configs, "--ldflags=" .. table.concat(ldflags, ' '))
     end
+    if shflags and #shflags > 0 then
+        table.insert(configs, "--shflags=" .. table.concat(shflags, ' '))
+    end
     local buildir = opt.buildir or package:buildir()
     if buildir then
         table.insert(configs, "--buildir=" .. buildir)
@@ -321,9 +325,8 @@ function _get_package_requireinfo(packagename)
 end
 
 -- get package toolchains envs
-function _get_package_toolchains_envs(package, opt)
+function _get_package_toolchains_envs(envs, package, opt)
     opt = opt or {}
-    local envs = {}
     local toolchains = package:config("toolchains")
     if toolchains then
 
@@ -354,9 +357,7 @@ function _get_package_toolchains_envs(package, opt)
         end
         rcfile:print("add_toolchains(\"%s\")", table.concat(table.wrap(toolchains), '", "'))
         rcfile:close()
-        envs.XMAKE_RCFILES = {}
         table.insert(envs.XMAKE_RCFILES, rcfile_path)
-        table.join2(envs.XMAKE_RCFILES, os.getenv("XMAKE_RCFILES"))
 
         -- pass custom toolchains definition in project
         for _, toolchain_inst in ipairs(toolchains_custom) do
@@ -375,12 +376,60 @@ function _get_package_toolchains_envs(package, opt)
             end
         end
     end
-    return envs
+end
+
+-- get require paths
+function _get_package_requirepaths(requirepaths, package, dep, rootpath)
+    for _, plaindep in ipairs(package:plaindeps()) do
+        local subpath = table.join(rootpath, plaindep:name())
+        if plaindep == dep then
+            table.insert(requirepaths, table.concat(subpath, "."))
+        else
+            _get_package_requirepaths(requirepaths, plaindep, dep, subpath)
+        end
+    end
+end
+
+-- get package depconfs envs
+-- @see https://github.com/xmake-io/xmake/issues/3952
+function _get_package_depconfs_envs(envs, package, opt)
+    local policy = package:policy("package.xmake.pass_depconfs")
+    if policy == nil then
+        policy = project.policy("package.xmake.pass_depconfs")
+    end
+    if policy == false then
+        return
+    end
+    local requireconfs = {}
+    for _, dep in ipairs(package:librarydeps()) do
+        local requireinfo = dep:requireinfo()
+        if requireinfo and (requireinfo.override or (requireinfo.configs and not table.empty(requireinfo.configs))) then
+            local requirepaths = {}
+            _get_package_requirepaths(requirepaths, package, dep, {})
+            if #requirepaths > 0 then
+                table.insert(requireconfs, {requirepaths = requirepaths, requireinfo = requireinfo})
+            end
+        end
+    end
+    if #requireconfs > 0 then
+        local rcfile_path = os.tmpfile() .. ".lua"
+        local rcfile = io.open(rcfile_path, 'w')
+        for _, requireconf in ipairs(requireconfs) do
+            for _, requirepath in ipairs(requireconf.requirepaths) do
+                rcfile:print("add_requireconfs(\"%s\", %s)", requirepath, string.serialize(requireconf.requireinfo, {strip = true, indent = false}))
+            end
+        end
+        rcfile:close()
+        table.insert(envs.XMAKE_RCFILES, rcfile_path)
+    end
 end
 
 -- get the build environments
 function buildenvs(package, opt)
-    local envs = _get_package_toolchains_envs(package, opt)
+    local envs = {XMAKE_RCFILES = {}}
+    table.join2(envs.XMAKE_RCFILES, os.getenv("XMAKE_RCFILES"))
+    _get_package_toolchains_envs(envs, package, opt)
+    _get_package_depconfs_envs(envs, package, opt)
     -- we should avoid using $XMAKE_CONFIGDIR outside to cause conflicts
     envs.XMAKE_CONFIGDIR = os.curdir()
     envs.XMAKE_IN_XREPO  = "1"

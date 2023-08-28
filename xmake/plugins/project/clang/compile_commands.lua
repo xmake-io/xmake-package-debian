@@ -54,6 +54,32 @@ function _get_lsp()
     return lsp
 end
 
+-- specify windows sdk verison
+function _get_windows_sdk_arguments(target)
+    local args = {}
+    local msvc = target:toolchain("msvc")
+    if msvc then
+        local envs = msvc:runenvs()
+        local WindowsSdkDir = envs.WindowsSdkDir
+        local WindowsSDKVersion = envs.WindowsSDKVersion
+        if WindowsSdkDir and WindowsSDKVersion then
+            local includedirs = os.dirs(path.join(WindowsSdkDir, "Include", envs.WindowsSDKVersion, "*"))
+            for _, tool in ipairs({"atlmfc", "diasdk"}) do
+                local tool_dir = path.join(WindowsSdkDir, tool, "include")
+                if os.isdir(tool_dir) then
+                    table.insert(includedirs, tool_dir)
+                end
+            end
+
+            for _, dir in ipairs(includedirs) do
+                table.insert(args, "-imsvc")
+                table.insert(args, dir)
+            end
+        end
+    end
+    return args
+end
+
 -- translate external/system include flags, because some tools (vscode) do not support them yet.
 -- https://github.com/xmake-io/xmake/issues/1050
 function _translate_arguments(arguments)
@@ -62,7 +88,7 @@ function _translate_arguments(arguments)
     local is_include = false
     local lsp = _get_lsp()
     for idx, arg in ipairs(arguments) do
-        -- convert path to string, maybe we need convert path, but not supported now.
+        -- convert path to string, maybe we need to convert path, but not supported now.
         arg = tostring(arg)
 
         -- see https://github.com/xmake-io/xmake/issues/1721
@@ -72,7 +98,7 @@ function _translate_arguments(arguments)
         if arg:startswith("-isystem-after", 1, true) then
             arg = "-I" .. arg:sub(15)
         elseif arg:startswith("-isystem", 1, true) then
-            -- clangd support `-isystem`, we need not translate it
+            -- clangd support `-isystem`, we don't need to translate it
             -- @see https://github.com/xmake-io/xmake/issues/3020
             if not lsp or lsp ~= "clangd" then
                 arg = "-I" .. arg:sub(9)
@@ -120,7 +146,7 @@ function _translate_arguments(arguments)
 end
 
 -- make command
-function _make_arguments(jsonfile, arguments, sourcefile)
+function _make_arguments(jsonfile, arguments, sourcefile, target)
 
     -- attempt to get source file from arguments
     if not sourcefile then
@@ -138,6 +164,11 @@ function _make_arguments(jsonfile, arguments, sourcefile)
 
     -- translate some unsupported arguments
     arguments = _translate_arguments(arguments)
+
+    local lsp = _get_lsp()
+    if lsp and lsp == "clangd" and target:is_plat("windows") then
+        table.join2(arguments, _get_windows_sdk_arguments(target))
+    end
 
     -- escape '"', '\'
     local arguments_escape = {}
@@ -184,7 +215,7 @@ function _add_target_source_commands(jsonfile, target)
             for index, sourcefile in ipairs(sourcebatch.sourcefiles) do
                 local objectfile = sourcebatch.objectfiles[index]
                 local arguments = table.join(compiler.compargv(sourcefile, objectfile, {target = target, sourcekind = sourcekind}))
-                _make_arguments(jsonfile, arguments, sourcefile)
+                _make_arguments(jsonfile, arguments, sourcefile, target)
             end
         end
     end

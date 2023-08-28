@@ -156,7 +156,7 @@ end
 function _get_cflags_from_packagedeps(package, opt)
     local result = {}
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = type(depname) == "string" and package:dep(depname) or depname
+        local dep = type(depname) ~= "string" and depname or package:dep(depname)
         if dep then
             local fetchinfo = dep:fetch({external = false})
             if fetchinfo then
@@ -173,7 +173,7 @@ end
 function _get_ldflags_from_packagedeps(package, opt)
     local result = {}
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = type(depname) == "string" and package:dep(depname) or depname
+        local dep = type(depname) ~= "string" and depname or package:dep(depname)
         if dep then
             local fetchinfo = dep:fetch({external = false})
             if fetchinfo then
@@ -371,6 +371,9 @@ function buildenvs(package, opt)
         if os.isdir(pkgconfig) then
             table.insert(PKG_CONFIG_PATH, pkgconfig)
         end
+    end
+    -- some binary packages contain it too. e.g. libtool
+    for _, dep in ipairs(package:orderdeps()) do
         local aclocal = path.join(dep:installdir(), "share", "aclocal")
         if os.isdir(aclocal) then
             table.insert(ACLOCAL_PATH, aclocal)
@@ -396,6 +399,9 @@ function autogen_envs(package, opt)
         if os.isdir(pkgconfig) then
             table.insert(PKG_CONFIG_PATH, pkgconfig)
         end
+    end
+    -- some binary packages contain it too. e.g. libtool
+    for _, dep in ipairs(package:orderdeps()) do
         local aclocal = path.join(dep:installdir(), "share", "aclocal")
         if os.isdir(aclocal) then
             table.insert(ACLOCAL_PATH, aclocal)

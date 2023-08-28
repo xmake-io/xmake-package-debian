@@ -31,9 +31,8 @@ import("core.tool.toolchain")
 import("core.cache.memcache")
 import("core.cache.localcache")
 import("lib.detect.find_tool")
-import("private.action.run.make_runenvs")
+import("private.action.run.runenvs")
 import("private.action.require.install", {alias = "install_requires"})
-import("actions.config.configheader", {alias = "generate_configheader", rootdir = os.programdir()})
 import("actions.config.configfiles", {alias = "generate_configfiles", rootdir = os.programdir()})
 import("vstudio.impl.vsutils", {rootdir = path.join(os.programdir(), "plugins", "project")})
 
@@ -164,8 +163,8 @@ function _make_targetinfo(mode, arch, target)
     end
 
     -- save runenvs
-    local runenvs = {}
-    local addrunenvs, setrunenvs = make_runenvs(target)
+    local targetrunenvs = {}
+    local addrunenvs, setrunenvs = runenvs.make(target)
     for k, v in table.orderpairs(target:pkgenvs()) do
         addrunenvs = addrunenvs or {}
         addrunenvs[k] = table.join(table.wrap(addrunenvs[k]), path.splitenv(v))
@@ -180,25 +179,25 @@ function _make_targetinfo(mode, arch, target)
         -- https://github.com/xmake-io/xmake/issues/3391
         v = table.unique(v)
         if k:upper() == "PATH" then
-            runenvs[k] = _make_dirs(v) .. ";$([System.Environment]::GetEnvironmentVariable('" .. k .. "'))"
+            targetrunenvs[k] = _make_dirs(v) .. ";$([System.Environment]::GetEnvironmentVariable('" .. k .. "'))"
         else
-            runenvs[k] = path.joinenv(v) .. ";$([System.Environment]::GetEnvironmentVariable('" .. k .."'))"
+            targetrunenvs[k] = path.joinenv(v) .. ";$([System.Environment]::GetEnvironmentVariable('" .. k .."'))"
         end
     end
     for k, v in table.orderpairs(setrunenvs) do
         if #v == 1 then
             v = v[1]
             if path.is_absolute(v) and v:startswith(project.directory()) then
-                runenvs[k] = _make_dirs(v)
+                targetrunenvs[k] = _make_dirs(v)
             else
-                runenvs[k] = v[1]
+                targetrunenvs[k] = v[1]
             end
         else
-            runenvs[k] = path.joinenv(v)
+            targetrunenvs[k] = path.joinenv(v)
         end
     end
     local runenvstr = {}
-    for k, v in table.orderpairs(runenvs) do
+    for k, v in table.orderpairs(targetrunenvs) do
         table.insert(runenvstr, k .. "=" .. v)
     end
     targetinfo.runenvs = table.concat(runenvstr, "\n")
@@ -325,32 +324,39 @@ function _make_filter(filepath, target, vcxprojdir)
             local extraconf = filegroups_extraconf[filegroup] or {}
             local rootdir = extraconf.rootdir
             assert(rootdir, "please set root directory, e.g. add_filegroups(%s, {rootdir = 'xxx'})", filegroup)
-            if not path.is_absolute(rootdir) then
-                rootdir = path.absolute(rootdir, scriptdir)
-            end
-            local fileitem = path.relative(filepath, rootdir)
-            local files = extraconf.files or "**"
-            local mode = extraconf.mode
-            for _, filepattern in ipairs(files) do
-                filepattern = path.pattern(path.absolute(path.join(rootdir, filepattern)))
-                if filepath:match(filepattern) then
-                    if mode == "plain" then
-                        filter = path.normalize(filegroup)
-                        is_plain = true
-                    else
-                        -- file tree mode (default)
-                        if filegroup ~= "" then
-                            filter = path.normalize(path.join(filegroup, path.directory(fileitem)))
+            for _, rootdir in ipairs(table.wrap(rootdir)) do
+                if not path.is_absolute(rootdir) then
+                    rootdir = path.absolute(rootdir, scriptdir)
+                end
+                local fileitem = path.relative(filepath, rootdir)
+                local files = extraconf.files or "**"
+                local mode = extraconf.mode
+                for _, filepattern in ipairs(files) do
+                    filepattern = path.pattern(path.absolute(path.join(rootdir, filepattern)))
+                    if filepath:match(filepattern) then
+                        if mode == "plain" then
+                            filter = path.normalize(filegroup)
+                            is_plain = true
                         else
-                            filter = path.normalize(path.directory(fileitem))
+                            -- file tree mode (default)
+                            if filegroup ~= "" then
+                                filter = path.normalize(path.join(filegroup, path.directory(fileitem)))
+                            else
+                                filter = path.normalize(path.directory(fileitem))
+                            end
                         end
+                        if filter and filter == '.' then
+                            filter = nil
+                        end
+                        goto found_filter
                     end
-                    if filter and filter == '.' then
-                        filter = nil
-                    end
-                    break
+                end
+                -- stop once a rootdir matches
+                if filter then
+                    goto found_filter
                 end
             end
+            ::found_filter::
         end
     end
     if not filter and not is_plain then
@@ -456,7 +462,6 @@ function main(outputdir, vsinfo)
 
             -- update config files
             generate_configfiles()
-            generate_configheader()
 
             -- ensure to enter project directory
             os.cd(project.directory())
@@ -491,14 +496,32 @@ function main(outputdir, vsinfo)
                 -- save all sourcefiles and headerfiles
                 _target.sourcefiles = table.unique(table.join(_target.sourcefiles or {}, (target:sourcefiles())))
                 _target.headerfiles = table.unique(table.join(_target.headerfiles or {}, (target:headerfiles())))
+                _target.extrafiles = table.unique(table.join(_target.extrafiles or {}, (target:get("extrafiles"))))
 
                 -- sort them to stabilize generation
                 table.sort(_target.sourcefiles)
                 table.sort(_target.headerfiles)
+                table.sort(_target.extrafiles)
 
                 -- save file groups
-                _target.filegroups = target:get("filegroups")
-                _target.filegroups_extraconf = target:extraconf("filegroups")
+                _target.filegroups = table.unique(table.join(_target.filegroups or {}, target:get("filegroups")))
+
+                for filegroup, groupconf in pairs(target:extraconf("filegroups")) do
+                    _target.filegroups_extraconf = _target.filegroups_extraconf or {}
+                    local mergedconf = _target.filegroups_extraconf[filegroup]
+                    if not mergedconf then
+                        mergedconf = {}
+                        _target.filegroups_extraconf[filegroup] = mergedconf
+                    end
+
+                    if groupconf.rootdir then
+                        mergedconf.rootdir = table.unique(table.join(mergedconf.rootdir or {}, table.wrap(groupconf.rootdir)))
+                    end
+                    if groupconf.files then
+                        mergedconf.files = table.unique(table.join(mergedconf.files or {}, table.wrap(groupconf.files)))
+                    end
+                    mergedconf.plain = groupconf.plain or mergedconf.plain
+                end
 
                 -- save deps
                 _target.deps = table.unique(table.join(_target.deps or {}, table.orderkeys(target:deps()), nil))
@@ -513,7 +536,8 @@ function main(outputdir, vsinfo)
         local root = target.absscriptdir or projectdir
         target.sourcefiles = table.imap(target.sourcefiles, function(_, v) return path.relative(v, projectdir) end)
         target.headerfiles = table.imap(target.headerfiles, function(_, v) return path.relative(v, projectdir) end)
-        for _, f in ipairs(table.join(target.sourcefiles, target.headerfiles)) do
+        target.extrafiles = table.imap(target.extrafiles, function(_, v) return path.relative(v, projectdir) end)
+        for _, f in ipairs(table.join(target.sourcefiles, target.headerfiles or {}, target.extrafiles)) do
             local dir = _make_filter(f, target, root)
             local escaped_f = vsutils.escape(f)
             target._paths[f] =
@@ -541,7 +565,7 @@ function main(outputdir, vsinfo)
         end
     end
 
-    -- we need set startup project for default or binary target
+    -- we need to set startup project for default or binary target
     -- @see https://github.com/xmake-io/xmake/issues/1249
     local targetnames = {}
     for targetname, target in table.orderpairs(project.targets()) do

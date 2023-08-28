@@ -92,7 +92,7 @@ function interpreter._merge_root_scope(root, root_prev, override)
     root_prev = root_prev or {}
     for scope_kind_and_name, _ in pairs(root or {}) do
         -- only merge sub-scope for each kind("target@@xxxx") or __rootkind
-        -- we need ignore the sub-root scope e.g. target{} after fetching root scope
+        -- we need to ignore the sub-root scope e.g. target{} after fetching root scope
         --
         if scope_kind_and_name:find("@@", 1, true) or scope_kind_and_name == "__rootkind" then
             local scope_values = root_prev[scope_kind_and_name] or {}
@@ -481,7 +481,7 @@ function interpreter:_handle(scope, deduplicate, enable_filter)
 
         -- filter values
         --
-        -- @note we need do filter before removing repeat values
+        -- @note we need to do filter before removing repeat values
         -- https://github.com/xmake-io/xmake/issues/1732
         if enable_filter then
             values = self:_filter(values)
@@ -684,8 +684,8 @@ function interpreter.new()
 
     -- register the builtin interfaces
     instance:api_register(nil, "includes",     interpreter.api_builtin_includes)
-    instance:api_register(nil, "add_subdirs",  interpreter.api_builtin_includes)
-    instance:api_register(nil, "add_subfiles", interpreter.api_builtin_includes)
+    instance:api_register(nil, "add_subdirs",  interpreter.api_builtin_add_subdirs)
+    instance:api_register(nil, "add_subfiles", interpreter.api_builtin_add_subfiles)
     instance:api_register(nil, "set_xmakever", interpreter.api_builtin_set_xmakever)
     instance:api_register(nil, "save_scope",   interpreter.api_builtin_save_scope)
     instance:api_register(nil, "restore_scope",interpreter.api_builtin_restore_scope)
@@ -1080,7 +1080,7 @@ function interpreter:api_register_set_values(scope_kind, ...)
             extra_config = nil
         end
 
-        -- @note we need mark table value as meta object to avoid wrap/unwrap
+        -- @note we need to mark table value as meta object to avoid wrap/unwrap
         -- if these values cannot be expanded, especially when there is only one value
         --
         -- e.g. set_shflags({"-Wl,-exported_symbols_list", exportfile}, {force = true, expand = false})
@@ -1130,7 +1130,7 @@ function interpreter:api_register_add_values(scope_kind, ...)
             extra_config = nil
         end
 
-        -- @note we need mark table value as meta object to avoid wrap/unwrap
+        -- @note we need to mark table value as meta object to avoid wrap/unwrap
         -- if these values cannot be expanded, especially when there is only one value
         --
         -- e.g. add_shflags({"-Wl,-exported_symbols_list", exportfile}, {force = true, expand = false})
@@ -1710,6 +1710,20 @@ function interpreter:api_builtin_includes(...)
 
     -- restore the current file
     self._PRIVATE._CURFILE = curfile
+end
+
+-- the builtin api: add_subdirs(), deprecated
+function interpreter:api_builtin_add_subdirs(...)
+    self:api_builtin_includes(...)
+    local dirs = {...}
+    deprecated.add("includes(%s)", "add_subdirs(%s)", table.concat(dirs, ", "), table.concat(dirs, ", "))
+end
+
+-- the builtin api: add_subfiles(), deprecated
+function interpreter:api_builtin_add_subfiles(...)
+    self:api_builtin_includes(...)
+    local files = {...}
+    deprecated.add("includes(%s)", "add_subfiles(%s)", table.concat(files, ", "), table.concat(files, ", "))
 end
 
 -- the builtin api: save_scope()

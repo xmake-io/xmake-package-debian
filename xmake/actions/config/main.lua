@@ -30,7 +30,6 @@ import("core.cache.localcache")
 import("scangen")
 import("menuconf", {alias = "menuconf_show"})
 import("configfiles", {alias = "generate_configfiles"})
-import("configheader", {alias = "generate_configheader"})
 import("private.action.require.check", {alias = "check_packages"})
 import("private.action.require.install", {alias = "install_packages"})
 import("private.service.remote_build.action", {alias = "remote_build_action"})
@@ -90,8 +89,8 @@ function _need_check(changed)
         changed = true
     end
 
-    -- xmake has been updated? force to check config again
-    -- we need clean the dirty config cache of the old version
+    -- Has xmake been updated? force to check config again
+    -- we need to clean the dirty config cache of the old version
     if not changed then
         if os.mtime(path.join(os.programdir(), "core", "main.lua")) > os.mtime(config.filepath()) then
             changed = true
@@ -126,6 +125,14 @@ function _check_target_toolchains()
         if target:is_enabled() and (target:get("toolchains") or
                                     not target:is_plat(config.get("plat")) or
                                     not target:is_arch(config.get("arch"))) then
+
+            -- check platform toolchains first
+            -- `target/set_plat()` and target:toolchains() need it
+            local ok, errors = target:platform():check()
+            if not ok then
+                raise(errors)
+            end
+
             local target_toolchains = target:get("toolchains")
             if target_toolchains then
                 target_toolchains = hashset.from(table.wrap(target_toolchains))
@@ -134,12 +141,6 @@ function _check_target_toolchains()
                     if not toolchain_inst:check() and target_toolchains:has(toolchain_inst:name()) then
                         raise("toolchain(\"%s\"): not found!", toolchain_inst:name())
                     end
-                end
-            else
-                -- check platform toolchains for `target/set_plat()`
-                local ok, errors = target:platform():check()
-                if not ok then
-                    raise(errors)
                 end
             end
         elseif not target:get("toolset") then
@@ -216,7 +217,7 @@ function main(opt)
         return remote_build_action()
     end
 
-    -- avoid to run this task repeatly
+    -- avoid running this task repeatly
     opt = opt or {}
     if _g.configured then return end
     _g.configured = true
@@ -271,7 +272,7 @@ force to build in current directory via run `xmake -P .`]], os.projectdir())
     local importfile = option.get("import")
     if importfile then
         assert(os.isfile(importfile), "%s not found!", importfile)
-        -- we need use readonly, @see https://github.com/xmake-io/xmake/issues/2278
+        -- we need to use readonly, @see https://github.com/xmake-io/xmake/issues/2278
         local import_configs = io.load(importfile)
         if import_configs then
             for name, value in pairs(import_configs) do
@@ -290,7 +291,7 @@ force to build in current directory via run `xmake -P .`]], os.projectdir())
         options = options or options_history
     end
     for name, value in pairs(options) do
-        -- options is changed by argument options?
+        -- Is options changed by argument options?
         options_changed = options_changed or options_history[name] ~= value
         -- @note override it and mark as readonly (highest priority)
         config.set(name, value, {readonly = true})
@@ -404,9 +405,6 @@ force to build in current directory via run `xmake -P .`]], os.projectdir())
 
         -- update the config files
         generate_configfiles({force = recheck})
-        if recheck then
-            generate_configheader()
-        end
     end
 
     -- dump config
@@ -419,7 +417,7 @@ force to build in current directory via run `xmake -P .`]], os.projectdir())
         _export_configs()
     end
 
-    -- we need save it and enable external working mode
+    -- we need to save it and enable external working mode
     -- if we configure the given project directory
     --
     -- @see https://github.com/xmake-io/xmake/issues/3342

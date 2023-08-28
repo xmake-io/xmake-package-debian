@@ -44,7 +44,7 @@ end
 -- get stl modules cache directory
 function stlmodules_cachedir(target, opt)
     opt = opt or {}
-    local stlcachedir = path.join(config.buildir(), "stlmodules", "cache", config.mode() or "release")
+    local stlcachedir = path.join(config.buildir(), "stlmodules", "cache", target:arch(), config.mode() or "release")
     if opt.mkdir and not os.isdir(stlcachedir) then
         os.mkdir(stlcachedir)
         os.mkdir(path.join(stlcachedir, "experimental"))
@@ -544,7 +544,7 @@ function fallback_generate_dependencies(target, jsonfile, sourcefile, preprocess
             end
         end
         local module_depname = line:match("import%s+(.+)%s*;")
-        -- we need parse module interface dep in cxx/impl_unit.cpp, e.g. hello.mpp and hello_impl.cpp
+        -- we need to parse module interface dep in cxx/impl_unit.cpp, e.g. hello.mpp and hello_impl.cpp
         -- @see https://github.com/xmake-io/xmake/pull/2664#issuecomment-1213167314
         if not module_depname and not has_module_extension(sourcefile) then
             module_depname = module_name_private

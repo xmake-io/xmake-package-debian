@@ -144,7 +144,7 @@ function _load_require(require_str, requires_extra, parentinfo)
     end
 
     -- get required building configurations
-    -- we need clone a new configs object, because the whole requireinfo will be modified later.
+    -- we need to clone a new configs object, because the whole requireinfo will be modified later.
     -- @see https://github.com/xmake-io/xmake-repo/pull/2067
     local require_build_configs = table.clone(require_extra.configs or require_extra.config)
     if require_extra.debug then
@@ -155,7 +155,7 @@ function _load_require(require_str, requires_extra, parentinfo)
     -- require packge in the current host platform
     if require_extra.host then
         if is_subhost(core_package.targetplat()) and os.subarch() == core_package.targetarch() then
-            -- we need pass plat/arch to avoid repeat installation
+            -- we need to pass plat/arch to avoid repeat installation
             -- @see https://github.com/xmake-io/xmake/issues/1579
         else
             require_extra.plat = os.subhost()
@@ -171,6 +171,13 @@ function _load_require(require_str, requires_extra, parentinfo)
         if not extra_options:has(name) then
             wprint("add_requires(\"%s\") has unknown option: {%s=%s}!", require_str, name, tostring(value))
         end
+    end
+
+    -- we always use xmake package, `add_requires("xmake::zlib")`,
+    -- it is equivalent to `add_requires("zlib", {system = false})`
+    if packagename:startswith("xmake::") then
+        packagename = packagename:sub(8)
+        require_extra.system = false
     end
 
     -- init required item
@@ -331,6 +338,8 @@ function _add_package_configurations(package)
     package:add("configs", "cxflags", {builtin = true, description = "Set the C/C++ compiler flags."})
     package:add("configs", "cxxflags", {builtin = true, description = "Set the C++ compiler flags."})
     package:add("configs", "asflags", {builtin = true, description = "Set the assembler flags."})
+    package:add("configs", "ldflags", {builtin = true, description = "Set the binary linker flags."})
+    package:add("configs", "shflags", {builtin = true, description = "Set the shared library linker flags."})
 end
 
 -- select package version
@@ -513,7 +522,7 @@ function _finish_requireinfo(requireinfo, package)
             requireinfo.configs.vs_runtime = "MT"
         end
     end
-    -- we need ensure readonly configs
+    -- we need to ensure readonly configs
     for _, name in ipairs(table.keys(requireinfo.configs)) do
         local current = requireinfo.configs[name]
         local default = package:extraconf("configs", name, "default")
@@ -553,7 +562,7 @@ function _merge_requireinfo(requireinfo, requirepath)
         end
     end
 
-    -- append requireconf_extra into requireinfo
+    -- Append requireconf_extra into requireinfo
     -- and the configs of add_requires have a higher priority than add_requireconfs.
     --
     -- e.g.
@@ -562,16 +571,20 @@ function _merge_requireinfo(requireinfo, requirepath)
     --
     -- foo and bar will be debug mode
     --
-    -- we can also override the configs of add_requires
+    -- We can also override the configs of add_requires
     --
     -- e.g.
     -- add_requires("zlib 1.2.11")
     -- add_requireconfs("zlib", {override = true, version = "1.2.10"})
     --
-    -- we override the version of zlib to 1.2.10
+    -- We override the version of zlib to 1.2.10
     --
-    if #requireconf_result == 1 then
-        local requireconf_extra = requireconf_result[1].requireconf_extra
+    -- If the same dependency is matched to multiple configurations,
+    -- the configurations are merged by default,
+    -- and if override is set, then it rewrites the previous configurations.
+    --
+    for _, item in ipairs(requireconf_result) do
+        local requireconf_extra = item.requireconf_extra
         if requireconf_extra then
             -- preprocess requireconf_extra, (debug, override ..)
             local override = requireconf_extra.override
@@ -595,12 +608,6 @@ function _merge_requireinfo(requireinfo, requirepath)
                 end
             end
         end
-    elseif #requireconf_result > 1 then
-        local confs = {}
-        for _, item in ipairs(requireconf_result) do
-            table.insert(confs, item.requireconf)
-        end
-        raise("package(%s) will match multiple add_requireconfs(%s)!", requirepath, table.concat(confs, " "))
     end
 end
 
@@ -822,6 +829,11 @@ function _load_package(packagename, requireinfo, opt)
         if requireinfo.is_toplevel and not package_cached:is_toplevel() then
             package_cached:requireinfo().is_toplevel = true
         end
+        -- mark this cached package.requireinfo as override
+        -- @see https://github.com/xmake-io/xmake/issues/4078
+        if requireinfo.override then
+            package_cached:requireinfo().override = true
+        end
         return package_cached
     end
 
@@ -852,7 +864,7 @@ function _load_package(packagename, requireinfo, opt)
     -- check package configurations
     _check_package_configurations(package)
 
-    -- save artifacts info, we need add it at last before buildhash need depend on package configurations
+    -- save artifacts info, we need to add it at last before buildhash need depend on package configurations
     -- it will switch to install precompiled binary package from xmake-mirror/build-artifacts
     if from_repo and not option.get("build") and not requireinfo.build then
         local artifacts_manifest = repository.artifacts_manifest(packagename, version)
@@ -1084,7 +1096,7 @@ function should_install(package, opt)
     if package:exists() and _compatible_with_previous_librarydeps(package, opt) then
         return false
     end
-    -- we need not install it if this package need only be fetched
+    -- we don't need to install it if this package only need to be fetched
     if package:is_fetchonly() then
         return false
     end
