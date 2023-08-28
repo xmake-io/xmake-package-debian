@@ -32,6 +32,32 @@ import("private.action.build.object", {alias = "objectbuilder"})
 import("common")
 import("stl_headers")
 
+-- get bmi path
+-- @see https://github.com/xmake-io/xmake/issues/4063
+function _get_bmi_path(bmifile)
+    if is_host("windows") then
+        bmifile = bmifile:gsub(":", "_")
+    end
+    return bmifile
+end
+
+-- get clang path
+function _get_clang_path(target)
+    local clang_path = _g.clang_path
+    if not clang_path then
+        local program, toolname = target:tool("cxx")
+        if program and (toolname == "clang" or toolname == "clangxx") then
+            local clang = find_tool("clang", {program = program})
+            if clang then
+                clang_path = clang.program
+            end
+        end
+        clang_path = clang_path or false
+        _g.clang_path = clang_path
+    end
+    return clang_path or nil
+end
+
 -- get clang version
 function _get_clang_version(target)
     local clang_version = _g.clang_version
@@ -163,7 +189,7 @@ function load(target)
         target:set("symbols", dep_symbols and dep_symbols or "none")
     end
 
-    -- if use libc++, we need install libc++ and libc++abi
+    -- if use libc++, we need to install libc++ and libc++abi
     --
     -- on ubuntu:
     -- sudo apt install libc++-dev libc++abi-15-dev
@@ -208,7 +234,7 @@ function _get_toolchain_includedirs_for_stlheaders(target, includedirs, clang)
 end
 
 -- do compile for batchcmds
--- @note we need use batchcmds:compilev to translate paths in compflags for generator, e.g. -Ixx
+-- @note we need to use batchcmds:compilev to translate paths in compflags for generator, e.g. -Ixx
 function _batchcmds_compile(batchcmds, target, sourcefile, flags)
     local compinst = target:compiler("cxx")
     local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
@@ -243,7 +269,7 @@ function _build_modulefile(target, sourcefile, opt)
     local compileflags = {}
     local bmiflags
     if opt.provide then
-        bmifile = opt.provide.bmifile
+        bmifile = _get_bmi_path(opt.provide.bmifile)
         if moduleoutputflag then
             compileflags = table.join("-x", "c++-module", moduleoutputflag .. bmifile, requiresflags)
         else
@@ -302,6 +328,7 @@ end
 
 -- generate dependency files
 function generate_dependencies(target, sourcebatch, opt)
+    local compinst = target:compiler("cxx")
     local changed = false
     for _, sourcefile in ipairs(sourcebatch.sourcefiles) do
         local dependfile = target:dependfile(sourcefile)
@@ -313,11 +340,17 @@ function generate_dependencies(target, sourcebatch, opt)
             local outputdir = common.get_outputdir(target, sourcefile)
             local jsonfile = path.translate(path.join(outputdir, path.filename(sourcefile) .. ".json"))
             if has_clangscandepssupport(target) and not target:policy("build.c++.clang.fallbackscanner") then
+                -- We need absolute path of clang to use clang-scan-deps
+                -- See https://clang.llvm.org/docs/StandardCPlusPlusModules.html#possible-issues-failed-to-find-system-headers
+                local clang_path = compinst:program()
+                if not path.is_absolute(clang_path) then
+                    clang_path = _get_clang_path(target) or compinst:program()
+                end
                 local clangscandeps = _get_clang_scan_deps(target)
                 local compinst = target:compiler("cxx")
                 local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
                 local flags = table.join("--format=p1689", "--",
-                                         compinst:program(), "-x", "c++", "-c", sourcefile, "-o", target:objectfile(sourcefile),
+                                         clang_path, "-x", "c++", "-c", sourcefile, "-o", target:objectfile(sourcefile),
                                          compflags)
                 vprint(table.concat(table.join(clangscandeps, flags), " "))
                 local outdata, errdata = os.iorunv(clangscandeps, flags)
@@ -326,7 +359,6 @@ function generate_dependencies(target, sourcebatch, opt)
                 io.writefile(jsonfile, outdata)
             else
                 common.fallback_generate_dependencies(target, jsonfile, sourcefile, function(file)
-                    local compinst = target:compiler("cxx")
                     local compflags = compinst:compflags({sourcefile = file, target = target})
                     -- exclude -fmodule* and -std=c++/gnu++* flags because,
                     -- when they are set clang try to find bmi of imported modules but they don't exists a this point of compilation
@@ -599,7 +631,7 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                     end
 
                     if provide or common.has_module_extension(cppfile) then
-                        local bmifile = provide and provide.bmi
+                        local bmifile = _get_bmi_path(provide and provide.bmi)
                         if not common.memcache():get2(name or cppfile, "compiling") then
                             if name and module.external then
                                 common.memcache():set2(name or cppfile, "compiling", true)
@@ -620,7 +652,7 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                     elseif requiresflags then
                         local cxxflags = {}
                         for _, flag in ipairs(requiresflags) do
-                            -- we need wrap flag to support flag with space
+                            -- we need to wrap flag to support flag with space
                             if type(flag) == "string" and flag:find(" ", 1, true) then
                                 table.insert(cxxflags, {flag})
                             else
@@ -685,7 +717,7 @@ function build_modules_for_batchcmds(target, batchcmds, objectfiles, modules, op
             elseif requiresflags then
                 local cxxflags = {}
                 for _, flag in ipairs(requiresflags) do
-                    -- we need wrap flag to support flag with space
+                    -- we need to wrap flag to support flag with space
                     if type(flag) == "string" and flag:find(" ", 1, true) then
                         table.insert(cxxflags, {flag})
                     else

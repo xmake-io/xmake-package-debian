@@ -110,7 +110,7 @@ function _get_toolchain_includedirs_for_stlheaders(includedirs, gcc)
 end
 
 -- do compile for batchcmds
--- @note we need use batchcmds:compilev to translate paths in compflags for generator, e.g. -Ixx
+-- @note we need to use batchcmds:compilev to translate paths in compflags for generator, e.g. -Ixx
 function _batchcmds_compile(batchcmds, target, flags, sourcefile)
     local compinst = target:compiler("cxx")
     local compflags = compinst:compflags({sourcefile = sourcefile}, {target = target})
@@ -293,7 +293,6 @@ function generate_user_headerunits_for_batchjobs(target, batchjobs, headerunits,
     -- build headerunits
     local projectdir = os.projectdir()
     for _, headerunit in ipairs(headerunits) do
-        print(headerunit)
         local headerunit_path
         if headerunit.type == ":quote" then
             headerunit_path = path.join(".", path.relative(headerunit.path, projectdir))

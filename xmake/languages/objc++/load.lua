@@ -34,6 +34,7 @@ function _get_apis()
     ,   "target.add_undefines"
     ,   "target.add_frameworks"
     ,   "target.add_rpathdirs"  -- @note do not translate path, it's usually an absolute path or contains $ORIGIN/@loader_path
+    ,   "target.add_forceincludes"
         -- option.add_xxx
     ,   "option.add_cincludes"
     ,   "option.add_cxxincludes"
@@ -57,8 +58,8 @@ function _get_apis()
     ,   "package.add_links"
     ,   "package.add_syslinks"
     ,   "package.add_mflags"
-    ,   "package.add_xxflags"
-    ,   "package.add_xxxflags"
+    ,   "package.add_mxflags"
+    ,   "package.add_mxxflags"
     ,   "package.add_ldflags"
     ,   "package.add_arflags"
     ,   "package.add_shflags"
@@ -67,7 +68,7 @@ function _get_apis()
     ,   "package.add_frameworks"
     ,   "package.add_rpathdirs"
     ,   "package.add_linkdirs"
-    ,   "package.add_includedirs" --@note we need not uses paths for package, see https://github.com/xmake-io/xmake/issues/717
+    ,   "package.add_includedirs" --@note we don't need to use paths for package, see https://github.com/xmake-io/xmake/issues/717
     ,   "package.add_sysincludedirs"
     ,   "package.add_frameworkdirs"
         -- toolchain.add_xxx
@@ -90,12 +91,9 @@ function _get_apis()
     }
     apis.paths = {
         -- target.set_xxx
-        "target.set_headerdir"      -- TODO deprecated
-    ,   "target.set_config_header"
-    ,   "target.set_pmheader"
+        "target.set_pmheader"
     ,   "target.set_pmxxheader"
         -- target.add_xxx
-    ,   "target.add_headers"        -- TODO deprecated
     ,   "target.add_headerfiles"
     ,   "target.add_linkdirs"
     ,   "target.add_includedirs"

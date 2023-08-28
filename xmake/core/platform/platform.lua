@@ -66,7 +66,7 @@ end
 -- set platform architecture
 function _instance:arch_set(arch)
     if self:arch() ~= arch then
-        -- we need clean the dirty cache if architecture has been changed
+        -- we need to clean the dirty cache if architecture has been changed
         platform._PLATFORMS[self:name() .. "_" .. self:arch()] = nil
         platform._PLATFORMS[self:name() .. "_" .. arch] = self
         self._ARCH = arch
@@ -234,6 +234,10 @@ end
 
 -- do check
 function _instance:check()
+    local checked = self:_memcache():get("checked")
+    if checked ~= nil then
+        return checked
+    end
 
     -- check toolchains
     local toolchains = self:toolchains({all = true})
@@ -243,7 +247,7 @@ function _instance:check()
     local toolchains_valid = {}
     while idx <= num do
         local toolchain = toolchains[idx]
-        -- we need remove other standalone toolchains if standalone toolchain found
+        -- we need to remove other standalone toolchains if standalone toolchain found
         if (standalone and toolchain:is_standalone()) or not toolchain:check() then
             table.remove(toolchains, idx)
             num = num - 1
@@ -256,11 +260,13 @@ function _instance:check()
         end
     end
     if #toolchains == 0 then
+        self:_memcache():set("checked", false)
         return false, "toolchains not found!"
     end
 
     -- save valid toolchains
     config.set("__toolchains_" .. self:name() .. "_" .. self:arch(), toolchains_valid)
+    self:_memcache():set("checked", true)
     return true
 end
 

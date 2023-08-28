@@ -36,9 +36,8 @@ import("vsutils")
 import("core.cache.memcache")
 import("core.cache.localcache")
 import("private.action.require.install", {alias = "install_requires"})
-import("private.action.run.make_runenvs")
+import("private.action.run.runenvs")
 import("actions.config.configfiles", {alias = "generate_configfiles", rootdir = os.programdir()})
-import("actions.config.configheader", {alias = "generate_configheader", rootdir = os.programdir()})
 import("private.utils.batchcmds")
 
 function _translate_path(dir, vcxprojdir)
@@ -323,8 +322,8 @@ function _make_targetinfo(mode, arch, target, vcxprojdir)
     targetinfo.rundir = target:rundir()
 
     -- save runenvs
-    local runenvs = {}
-    local addrunenvs, setrunenvs = make_runenvs(target)
+    local targetrunenvs = {}
+    local addrunenvs, setrunenvs = runenvs.make(target)
     for k, v in table.orderpairs(target:pkgenvs()) do
         addrunenvs = addrunenvs or {}
         addrunenvs[k] = table.join(table.wrap(addrunenvs[k]), path.splitenv(v))
@@ -337,25 +336,25 @@ function _make_targetinfo(mode, arch, target, vcxprojdir)
     end
     for k, v in table.orderpairs(addrunenvs) do
         if k:upper() == "PATH" then
-            runenvs[k] = _translate_path(v, vcxprojdir) .. ";$([System.Environment]::GetEnvironmentVariable('" .. k .. "'))"
+            targetrunenvs[k] = _translate_path(v, vcxprojdir) .. ";$([System.Environment]::GetEnvironmentVariable('" .. k .. "'))"
         else
-            runenvs[k] = path.joinenv(v) .. ";$([System.Environment]::GetEnvironmentVariable('" .. k .."'))"
+            targetrunenvs[k] = path.joinenv(v) .. ";$([System.Environment]::GetEnvironmentVariable('" .. k .."'))"
         end
     end
     for k, v in table.orderpairs(setrunenvs) do
         if #v == 1 then
             v = v[1]
             if path.is_absolute(v) and v:startswith(project.directory()) then
-                runenvs[k] = _translate_path(v, vcxprojdir)
+                targetrunenvs[k] = _translate_path(v, vcxprojdir)
             else
-                runenvs[k] = v[1]
+                targetrunenvs[k] = v[1]
             end
         else
-            runenvs[k] = path.joinenv(v)
+            targetrunenvs[k] = path.joinenv(v)
         end
     end
     local runenvstr = {}
-    for k, v in table.orderpairs(runenvs) do
+    for k, v in table.orderpairs(targetrunenvs) do
         table.insert(runenvstr, k .. "=" .. v)
     end
     targetinfo.runenvs = table.concat(runenvstr, "\n")
@@ -378,57 +377,6 @@ function _make_targetinfo(mode, arch, target, vcxprojdir)
     -- save custom commands
     targetinfo.commands = _make_custom_commands(target, vcxprojdir)
     return targetinfo
-end
-
--- make target headers
-function _make_targetheaders(mode, arch, target, last)
-
-    -- only for static and shared target
-    local kind = target:kind()
-    if kind == "static" or kind == "shared" then
-
-        -- TODO make headers, (deprecated)
-        local srcheaders, dstheaders = target:headers()
-        if srcheaders and dstheaders then
-            local i = 1
-            for _, srcheader in ipairs(srcheaders) do
-                local dstheader = dstheaders[i]
-                if dstheader then
-                    os.cp(srcheader, dstheader)
-                end
-                i = i + 1
-            end
-        end
-
-        -- make config header
-        local configheader_raw = target:configheader()
-        if configheader_raw and os.isfile(configheader_raw) then
-
-            -- init the config header path for each mode and arch
-            local configheader_mode_arch = path.join(path.directory(configheader_raw), mode .. "." .. arch .. "." .. path.filename(configheader_raw))
-
-            -- init the temporary config header path
-            local configheader_tmp = path.join(path.directory(configheader_raw), "tmp." .. path.filename(configheader_raw))
-
-            -- copy the original config header first
-            os.cp(configheader_raw, configheader_mode_arch)
-
-            -- append the current config header
-            local file = io.open(configheader_tmp, "a+")
-            if file then
-                file:print("")
-                file:print("#if defined(__config_%s__) && defined(__config_%s__)", mode, arch)
-                file:print("#    include \"%s.%s.%s\"", mode, arch, path.filename(configheader_raw))
-                file:print("#endif")
-                file:close()
-            end
-
-            -- override the raw config header at last
-            if last and os.isfile(configheader_tmp) then
-                os.mv(configheader_tmp, configheader_raw)
-            end
-        end
-    end
 end
 
 function _make_vsinfo_modes()
@@ -553,7 +501,6 @@ function make(outputdir, vsinfo)
 
                 -- update config files
                 generate_configfiles()
-                generate_configheader()
             end
 
             -- ensure to enter project directory
@@ -583,17 +530,32 @@ function make(outputdir, vsinfo)
                 -- save all sourcefiles and headerfiles
                 _target.sourcefiles = table.unique(table.join(_target.sourcefiles or {}, (target:sourcefiles())))
                 _target.headerfiles = table.unique(table.join(_target.headerfiles or {}, (target:headerfiles())))
+                _target.extrafiles = table.unique(table.join(_target.extrafiles or {}, (target:get("extrafiles"))))
 
                 -- sort them to stabilize generation
                 table.sort(_target.sourcefiles)
                 table.sort(_target.headerfiles)
+                table.sort(_target.extrafiles)
 
                 -- save file groups
-                _target.filegroups = target:get("filegroups")
-                _target.filegroups_extraconf = target:extraconf("filegroups")
+                _target.filegroups = table.unique(table.join(_target.filegroups or {}, target:get("filegroups")))
 
-                -- make target headers
-                _make_targetheaders(mode, arch, target, mode_idx == #vsinfo.modes and arch_idx == 2)
+                for filegroup, groupconf in pairs(target:extraconf("filegroups")) do
+                    _target.filegroups_extraconf = _target.filegroups_extraconf or {}
+                    local mergedconf = _target.filegroups_extraconf[filegroup]
+                    if not mergedconf then
+                        mergedconf = {}
+                        _target.filegroups_extraconf[filegroup] = mergedconf
+                    end
+
+                    if groupconf.rootdir then
+                        mergedconf.rootdir = table.unique(table.join(mergedconf.rootdir or {}, table.wrap(groupconf.rootdir)))
+                    end
+                    if groupconf.files then
+                        mergedconf.files = table.unique(table.join(mergedconf.files or {}, table.wrap(groupconf.files)))
+                    end
+                    mergedconf.plain = groupconf.plain or mergedconf.plain
+                end
             end
         end
     end

@@ -47,15 +47,15 @@ function _map_linkflags(package, targetkind, sourcekinds, name, values)
     return linker.map_flags(targetkind, sourcekinds, name, values, {target = package})
 end
 
--- get pkg-config
+-- get pkg-config, we need force to find it, because package install environments will be changed
 function _get_pkgconfig(package)
     if package:is_plat("windows") then
-        local pkgconf = find_tool("pkgconf")
+        local pkgconf = find_tool("pkgconf", {force = true})
         if pkgconf then
             return pkgconf.program
         end
     end
-    local pkgconfig = find_tool("pkg-config")
+    local pkgconfig = find_tool("pkg-config", {force = true})
     if pkgconfig then
         return pkgconfig.program
     end
@@ -310,7 +310,7 @@ end
 -- get msvc
 function _get_msvc(package)
     local msvc = toolchain.load("msvc", {plat = package:plat(), arch = package:arch()})
-    assert(msvc:check(), "vs not found!") -- we need check vs envs if it has been not checked yet
+    assert(msvc:check(), "vs not found!") -- we need to check vs envs if it has been not checked yet
     return msvc
 end
 
@@ -330,7 +330,7 @@ end
 function _get_cflags_from_packagedeps(package, opt)
     local result = {}
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = type(depname) == "string" and package:dep(depname) or depname
+        local dep = type(depname) ~= "string" and depname or package:dep(depname)
         if dep then
             local fetchinfo = dep:fetch({external = false})
             if fetchinfo then
@@ -347,7 +347,7 @@ end
 function _get_ldflags_from_packagedeps(package, opt)
     local result = {}
     for _, depname in ipairs(opt.packagedeps) do
-        local dep = type(depname) == "string" and package:dep(depname) or depname
+        local dep = type(depname) ~= "string" and depname or package:dep(depname)
         if dep then
             local fetchinfo = dep:fetch({external = false})
             if fetchinfo then
@@ -388,9 +388,9 @@ function buildenvs(package, opt)
         envs.SHFLAGS   = table.concat(shflags, ' ')
         if package:is_plat("windows") then
             envs = os.joinenvs(envs, _get_msvc_runenvs(package))
-            local pkgconf = find_tool("pkgconf")
+            local pkgconf = _get_pkgconfig(package)
             if pkgconf then
-                envs.PKG_CONFIG = pkgconf.program
+                envs.PKG_CONFIG = pkgconf
             end
         end
     end
@@ -405,6 +405,9 @@ function buildenvs(package, opt)
         if os.isdir(pkgconfig) then
             table.insert(PKG_CONFIG_PATH, pkgconfig)
         end
+    end
+    -- some binary packages contain it too. e.g. libtool
+    for _, dep in ipairs(package:orderdeps()) do
         local aclocal = path.join(dep:installdir(), "share", "aclocal")
         if os.isdir(aclocal) then
             table.insert(ACLOCAL_PATH, aclocal)

@@ -54,21 +54,6 @@ function _do_link_target(target, opt)
     local depvalues = {linkinst:program(), linkflags}
     depend.on_changed(function ()
 
-        -- TODO make headers (deprecated)
-        if not dryrun then
-            local srcheaders, dstheaders = target:headers()
-            if srcheaders and dstheaders then
-                local i = 1
-                for _, srcheader in ipairs(srcheaders) do
-                    local dstheader = dstheaders[i]
-                    if dstheader then
-                        os.cp(srcheader, dstheader)
-                    end
-                    i = i + 1
-                end
-            end
-        end
-
         -- the target file
         local targetfile = target:targetfile()
 
@@ -172,7 +157,7 @@ function main(batchjobs, rootjob, target)
         _link_target(target, {progress = (index * 100) / total})
     end, {rootjob = rootjob})
 
-    -- we need only return and depend the link job for each target,
+    -- we only need to return and depend the link job for each target,
     -- so we can compile the source files for each target in parallel
     --
     -- unless call set_policy("build.across_targets_in_parallel", false) to disable to build across targets in parallel.

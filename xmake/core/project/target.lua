@@ -273,7 +273,7 @@ end
 function _instance:_invalidate(name)
     self._CACHEID = self._CACHEID + 1
     self._POLICIES = nil
-    -- we need flush the source files cache if target/files are modified, e.g. `target:add("files", "xxx.c")`
+    -- we need to flush the source files cache if target/files are modified, e.g. `target:add("files", "xxx.c")`
     if name == "files" then
         self._SOURCEFILES = nil
     elseif name == "deps" then
@@ -635,24 +635,52 @@ end
 
 -- get the target version
 function _instance:version()
-
-    -- get version and build version
     local version = self:get("version")
-    local version_build = nil
+    local version_build
     if version then
-        local version_extra = self:get("__extra_version")
-        if version_extra then
-            version_build = self._VERSION_BUILD
-            if not version_build then
-                version_build = table.wrap(version_extra[version]).build
-                if type(version_build) == "string" then
-                    version_build = os.date(version_build, os.time())
-                    self._VERSION_BUILD = version_build
-                end
-            end
+        version_build = self:extraconf("version", version, "build")
+        if type(version_build) == "string" then
+            version_build = os.date(version_build, os.time())
         end
     end
     return version, version_build
+end
+
+-- get the target soname
+-- @see https://github.com/tboox/tbox/issues/214
+--
+-- set_version("1.0.1", {soname = "1.0"}) -> libfoo.so.1.0, libfoo.1.0.dylib
+-- set_version("1.0.1", {soname = "1"}) -> libfoo.so.1, libfoo.1.dylib
+-- set_version("1.0.1", {soname = true}) -> libfoo.so.1, libfoo.1.dylib
+-- set_version("1.0.1", {soname = ""}) -> libfoo.so, libfoo.dylib
+function _instance:soname()
+    if not self:is_shared() then
+        return
+    end
+    if not self:is_plat("macosx", "linux", "bsd", "cross") then
+        return
+    end
+    local version = self:get("version")
+    local version_soname
+    if version then
+        version_soname = self:extraconf("version", version, "soname")
+        if version_soname == true then
+            version_soname = version:split(".", {plain = true})[1]
+        end
+    end
+    if not version_soname then
+        return
+    end
+    local soname = self:filename()
+    if type(version_soname) == "string" and #version_soname > 0 then
+        local extension = path.extension(soname)
+        if extension == ".dylib" then
+            soname = path.basename(soname) .. "." .. version_soname .. extension
+        else
+            soname = soname .. "." .. version_soname
+        end
+    end
+    return soname
 end
 
 -- get the target license
@@ -1140,7 +1168,7 @@ function _instance:autogenfile(sourcefile, opt)
     -- objectfile: project/build/.objs/xxxx/../../xxx.c will be out of range for objectdir
     -- autogenfile: project/build/.gens/xxxx/../../xxx.c will be out of range for autogendir
     --
-    -- we need replace '..' to '__' in this case
+    -- we need to replace '..' with '__' in this case
     --
     if path.is_absolute(relativedir) and os.host() == "windows" then
         -- remove C:\\ and whitespaces and fix long path issue
@@ -1257,11 +1285,6 @@ end
 -- get the script directory of xmake.lua
 function _instance:scriptdir()
     return self:get("__scriptdir")
-end
-
--- TODO get header directory (deprecated)
-function _instance:headerdir()
-    return self:get("headerdir") or config.buildir()
 end
 
 -- get configuration output directory
@@ -1539,7 +1562,7 @@ function _instance:sourcefiles()
                     pattern = pattern:sub(3)
                 end
                 pattern = path.pattern(pattern)
-                -- we need match whole pattern, https://github.com/xmake-io/xmake/issues/3523
+                -- we need to match whole pattern, https://github.com/xmake-io/xmake/issues/3523
                 if sourcefile:match("^" .. pattern .. "$") then
                     return true
                 end
@@ -1574,14 +1597,14 @@ function _instance:objectfiles()
     local batchcount = 0
     local sourcebatches = self:sourcebatches()
     local orderkeys = table.keys(sourcebatches)
-    table.sort(orderkeys) -- @note we need guarantee the order of objectfiles for depend.is_changed() and etc.
+    table.sort(orderkeys) -- @note we need to guarantee the order of objectfiles for depend.is_changed() and etc.
     for _, k in ipairs(orderkeys) do
         local sourcebatch = sourcebatches[k]
         table.join2(objectfiles, sourcebatch.objectfiles)
         batchcount = batchcount + 1
     end
 
-    -- some object files may be repeat and appear link errors if multi-batches exists, so we need remove all repeat object files
+    -- some object files may be repeat and appear link errors if multi-batches exists, so we need to remove all repeat object files
     -- e.g. add_files("src/*.c", {rules = {"rule1", "rule2"}})
     local deduplicate = batchcount > 1
 
@@ -1605,35 +1628,22 @@ function _instance:objectfiles()
     return objectfiles
 end
 
--- TODO get the header files, get("headers") (deprecated)
-function _instance:headers(outputdir)
-    return self:headerfiles(outputdir, {only_deprecated = true})
-end
-
 -- get the header files
---
--- default: get("headers") + get("headerfiles")
--- only_deprecated: get("headers")
---
 function _instance:headerfiles(outputdir, opt)
 
     -- get header files?
     opt = opt or {}
-    local headers = self:get("headers") -- TODO deprecated
-    local only_deprecated = opt.only_deprecated
-    if not only_deprecated then
-       headers = table.join(headers or {}, self:get("headerfiles"))
-       -- add_headerfiles("src/*.h", {install = false})
-       -- @see https://github.com/xmake-io/xmake/issues/2577
-       if opt.installonly then
-           local installfiles = {}
-           for _, headerfile in ipairs(table.wrap(headers)) do
-               if self:extraconf("headerfiles", headerfile, "install") ~= false then
-                   table.insert(installfiles, headerfile)
-               end
+    local headers = table.join(headers or {}, self:get("headerfiles"))
+    -- add_headerfiles("src/*.h", {install = false})
+    -- @see https://github.com/xmake-io/xmake/issues/2577
+    if opt.installonly then
+       local installfiles = {}
+       for _, headerfile in ipairs(table.wrap(headers)) do
+           if self:extraconf("headerfiles", headerfile, "install") ~= false then
+               table.insert(installfiles, headerfile)
            end
-           headers = installfiles
        end
+       headers = installfiles
     end
     if not headers then
         return
@@ -1642,9 +1652,7 @@ function _instance:headerfiles(outputdir, opt)
     -- get the installed header directory
     local headerdir = outputdir
     if not headerdir then
-        if only_deprecated then
-            headerdir = self:headerdir()
-        elseif self:installdir() then
+        if self:installdir() then
             headerdir = path.join(self:installdir(), "include")
         end
     end
@@ -1810,7 +1818,7 @@ function _instance:dependfile(objectfile)
 
     -- originfile: project/build/.objs/xxxx/../../xxx.c will be out of range for objectdir
     --
-    -- we need replace '..' to '__' in this case
+    -- we need to replace '..' to '__' in this case
     --
     relativedir = relativedir:gsub("%.%.", "__")
 
@@ -1997,78 +2005,6 @@ function _instance:script(name, generic)
     return result
 end
 
--- TODO get the config header version (deprecated)
-function _instance:configversion()
-
-    -- get the config version and build version
-    local version = nil
-    local buildversion = nil
-    local configheader = self:get("config_header")
-    local configheader_extra = self:get("__extra_config_header")
-    if type(configheader_extra) == "table" then
-        version      = table.wrap(configheader_extra[configheader]).version
-        buildversion = self._CONFIGHEADER_BUILDVERSION
-        if not buildversion then
-            buildversion = table.wrap(configheader_extra[configheader]).buildversion
-            if buildversion then
-                buildversion = os.date(buildversion, os.time())
-            end
-            self._CONFIGHEADER_BUILDVERSION = buildversion
-        end
-    end
-
-    -- ok?
-    return version, buildversion
-end
-
--- get the config header prefix
-function _instance:configprefix()
-
-    -- get the config prefix
-    local configprefix = nil
-    local configheader = self:get("config_header")
-    local configheader_extra = self:get("__extra_config_header")
-    if type(configheader_extra) == "table" then
-        configprefix = table.wrap(configheader_extra[configheader]).prefix
-    end
-    return configprefix
-end
-
--- get the config header files (deprecated)
-function _instance:configheader(outputdir)
-
-    -- get config header
-    local configheader = self:get("config_header")
-    if not configheader then
-        return
-    end
-
-    -- get the root directory
-    local rootdir, count = configheader:gsub("|.*$", ""):gsub("%(.*%)$", "")
-    if count == 0 then
-        rootdir = nil
-    end
-    if rootdir and rootdir:trim() == "" then
-        rootdir = "."
-    end
-
-    -- remove '(' and ')'
-    configheader = configheader:gsub("[%(%)]", "")
-
-    -- get the output header
-    local outputheader = nil
-    if outputdir then
-        if rootdir then
-            outputheader = path.absolute(path.relative(configheader, rootdir), outputdir)
-        else
-            outputheader = path.join(outputdir, path.filename(configheader))
-        end
-    end
-
-    -- ok
-    return configheader, outputheader
-end
-
 -- get the precompiled header file (xxx.[h|hpp|inl])
 --
 -- @param langkind  c/cxx
@@ -2140,7 +2076,8 @@ function _instance:toolchains()
     local toolchains = self:_memcache():get("toolchains")
     if toolchains == nil then
 
-        -- load target toolchains
+        -- load target toolchains first
+        local has_standalone = false
         local target_toolchains = self:get("toolchains")
         if target_toolchains then
             toolchains = {}
@@ -2156,12 +2093,29 @@ function _instance:toolchains()
                 if not toolchain_inst then
                     os.raise(errors)
                 end
+                if toolchain_inst:is_standalone() then
+                    has_standalone = true
+                end
                 table.insert(toolchains, toolchain_inst)
             end
+
+            -- we always need a standalone toolchain
+            -- because we maybe only set partial toolchains in target, e.g. nasm toolchain
+            --
+            -- @note platform has been checked in config/_check_target_toolchains
+            if not has_standalone then
+                for _, toolchain_inst in ipairs(self:platform():toolchains()) do
+                    if toolchain_inst:is_standalone() then
+                        table.insert(toolchains, toolchain_inst)
+                        has_standalone = true
+                        break
+                    end
+                end
+            end
         else
-            -- load platform toolchains
             toolchains = self:platform():toolchains()
         end
+
         self:_memcache():set("toolchains", toolchains)
     end
     return toolchains
@@ -2175,15 +2129,9 @@ function _instance:tool(toolkind)
     end
     return toolchain.tool(self:toolchains(), toolkind, {cachekey = "target_" .. self:name(), plat = self:plat(), arch = self:arch(),
                                                         before_get = function()
-        -- get program from set_toolchain/set_tools (deprecated)
-        local toolname
-        local program = self:get("toolset." .. toolkind) or self:get("toolchain." .. toolkind)
-        if not program then
-            local tools = self:get("tools") -- TODO: deprecated
-            if tools then
-                program = tools[toolkind]
-            end
-        end
+        -- get program from set_toolset
+        local program = self:get("toolset." .. toolkind)
+
         -- get program from `xmake f --cc`
         if not program and not self:get("toolchains") then
             program = config.get(toolkind)
@@ -2191,10 +2139,11 @@ function _instance:tool(toolkind)
 
         -- contain toolname? parse it, e.g. 'gcc@xxxx.exe'
         -- https://github.com/xmake-io/xmake/issues/1361
-        if program and not toolname then
+        local toolname
+        if program then
             local pos = program:find('@', 1, true)
             if pos then
-                -- we need ignore valid path with `@`, e.g. /usr/local/opt/go@1.17/bin/go
+                -- we need to ignore valid path with `@`, e.g. /usr/local/opt/go@1.17/bin/go
                 -- https://github.com/xmake-io/xmake/issues/2853
                 local prefix = program:sub(1, pos - 1)
                 if prefix and not prefix:find("[/\\]") then
@@ -2468,6 +2417,7 @@ function target.apis()
         ,   "target.set_toolchains"
         ,   "target.set_runargs"
         ,   "target.set_exceptions"
+        ,   "target.set_encodings"
             -- target.add_xxx
         ,   "target.add_deps"
         ,   "target.add_rules"
@@ -2484,7 +2434,6 @@ function target.apis()
             "target.set_values"
         ,   "target.set_configvar"
         ,   "target.set_runenv"
-        ,   "target.set_toolchain" -- TODO: deprecated
         ,   "target.set_toolset"
         ,   "target.set_policy"
             -- target.add_xxx
@@ -2505,17 +2454,12 @@ function target.apis()
         ,   "target.add_cleanfiles"
         ,   "target.add_configfiles"
         ,   "target.add_installfiles"
+        ,   "target.add_extrafiles"
             -- target.del_xxx (deprecated)
         ,   "target.del_files"
             -- target.remove_xxx
         ,   "target.remove_files"
         ,   "target.remove_headerfiles"
-        }
-    ,   dictionary =
-        {
-            -- target.set_xxx
-            "target.set_tools" -- TODO: deprecated
-        ,   "target.add_tools" -- TODO: deprecated
         }
     ,   script =
         {

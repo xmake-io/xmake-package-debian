@@ -84,7 +84,7 @@ function sandbox_lib_detect_find_program._check(program, opt)
         end
     elseif os.subhost() == "msys" and os.isfile(program) and os.filesize(program) < 256 then
         -- only a sh script on msys2? e.g. c:/msys64/usr/bin/7z
-        -- we need use sh to wrap it, otherwise os.exec cannot run it
+        -- we need to use sh to wrap it, otherwise os.exec cannot run it
         program = "sh " .. program
         findname = program
     end
@@ -227,7 +227,7 @@ function sandbox_lib_detect_find_program._find(name, paths, opt)
     if envpaths then
         table.join2(syspaths, path.splitenv(envpaths))
     end]]
-    if os.host() ~= "windows" then
+    if os.host() ~= "windows" or os.is_subhost("msys", "cygwin") then
         table.insert(syspaths, "/usr/local/bin")
         table.insert(syspaths, "/usr/bin")
     end

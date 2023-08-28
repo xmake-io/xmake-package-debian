@@ -549,7 +549,7 @@ function _make_source_options_cuda(vcxprojfile, flags, opt)
 
         -- make Warning
         if flagstr:find("[%-/]W[1234]") then
-            local wlevel = flagstr:find("[%-/](W[1234])")
+            local wlevel = flagstr:match("[%-/](W[1234])")
             vcxprojfile:print("<Warning%s>%s</Warning>", condition, wlevel)
         elseif flagstr:find("[%-/]Wall") then
             vcxprojfile:print("<Warning%s>Wall</Warning>", condition)
@@ -1067,7 +1067,7 @@ function _make_common_items(vcxprojfile, vsinfo, target)
 end
 
 -- make header file
-function _make_header_file(vcxprojfile, includefile, vcxprojdir)
+function _make_include_file(vcxprojfile, includefile, vcxprojdir)
     vcxprojfile:print("<ClInclude Include=\"%s\" />", path.relative(path.absolute(includefile), vcxprojdir))
 end
 
@@ -1114,7 +1114,7 @@ function _make_source_file_forall(vcxprojfile, vsinfo, target, sourcefile, sourc
         -- for *.c/cpp/cu files
         else
 
-            -- we need use different object directory and allow parallel building
+            -- we need to use different object directory and allow parallel building
             --
             -- @see https://github.com/xmake-io/xmake/issues/2016
             -- https://github.com/xmake-io/xmake/issues/1062
@@ -1246,7 +1246,7 @@ function _make_source_file_forspec(vcxprojfile, vsinfo, target, sourcefile, sour
 
         -- for *.c/cpp/cu files
         else
-           -- we need use different object directory and allow parallel building
+           -- we need to use different object directory and allow parallel building
             --
             -- @see https://github.com/xmake-io/xmake/issues/2016
             -- https://github.com/xmake-io/xmake/issues/1062
@@ -1343,13 +1343,13 @@ function _make_source_files(vcxprojfile, vsinfo, target)
 
     vcxprojfile:leave("</ItemGroup>")
 
-    -- add header files
+    -- add include files
     local pcheader = target.pcxxheader or target.pcheader
     vcxprojfile:enter("<ItemGroup>")
-        for _, includefile in ipairs(target.headerfiles) do
-            -- we need ignore pcheader file to fix https://github.com/xmake-io/xmake/issues/1171
+        for _, includefile in ipairs(table.join(target.headerfiles or {}, target.extrafiles)) do
+            -- we need to ignore pcheader file to fix https://github.com/xmake-io/xmake/issues/1171
             if not pcheader or includefile ~= pcheader then
-                _make_header_file(vcxprojfile, includefile, target.project_dir)
+                _make_include_file(vcxprojfile, includefile, target.project_dir)
             end
         end
     vcxprojfile:leave("</ItemGroup>")
