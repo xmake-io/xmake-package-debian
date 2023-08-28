@@ -7,6 +7,7 @@ xmake (2.8.2+ds-1) unstable; urgency=medium
 
   * d/rules: Remove permission change for register-completions scripts, fixed
     in upstream
+  * d/control: Update maintainer field
 
  -- Lance Lin <lq27267@gmail.com>  Mon, 28 Aug 2023 20:28:20 +0700
 
