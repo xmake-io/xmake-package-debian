@@ -1,6 +1,6 @@
 Description: Fix typos in manpages
 Author: Lance Lin <lq27267@gmail.com>
-Forwarded: no
+Forwarded: https://github.com/xmake-io/xmake/pull/4301
 Date: 01 Aug 2023
 
 --- a/scripts/man/xmake.1

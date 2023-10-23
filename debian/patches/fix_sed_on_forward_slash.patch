@@ -1,6 +1,6 @@
 Description: Fix sed on forward slashes
 Author: Lance Lin <lq27267@gmail.com>
-Forwarded: no
+Forwarded: https://github.com/xmake-io/xmake/pull/4300
 Date: 23 Aug 2023
 
 --- a/configure

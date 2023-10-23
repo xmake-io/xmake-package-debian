@@ -1,6 +1,6 @@
 Description: Replace unusual interpreter
 Author: Lance Lin <lq27267@gmail.com>
-Forwarded: no
+Forwarded: not-needed
 Date: 01 Aug 2023
 
 --- a/xmake/scripts/conan/extensions/generators/xmake_generator.py

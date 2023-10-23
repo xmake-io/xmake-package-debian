@@ -1,6 +1,6 @@
 Description: Convert local source to external dependencies 
 Author: Lance Lin <lq27267@gmail.com>
-Forwarded: no
+Forwarded: not-needed
 Date: 21 Aug 2023
 
 --- a/core/src/xmake/prefix.h
