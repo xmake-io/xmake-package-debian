@@ -291,6 +291,11 @@ function _get_configs(package, configs, opt)
         table.insert(configs, "-Db_lto=true")
     end
 
+    -- add asan
+    if package:config("asan") then
+        table.insert(configs, "-Db_sanitize=address")
+    end
+
     -- add vs_runtime flags
     local vs_runtime = package:config("vs_runtime")
     if package:is_plat("windows") and vs_runtime then
@@ -396,7 +401,7 @@ function buildenvs(package, opt)
     end
     local ACLOCAL_PATH = {}
     local PKG_CONFIG_PATH = {}
-    for _, dep in ipairs(package:librarydeps()) do
+    for _, dep in ipairs(package:librarydeps({private = true})) do
         local pkgconfig = path.join(dep:installdir(), "lib", "pkgconfig")
         if os.isdir(pkgconfig) then
             table.insert(PKG_CONFIG_PATH, pkgconfig)

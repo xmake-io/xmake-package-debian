@@ -46,10 +46,22 @@ function policy.policies()
             ["build.merge_archive"]               = {description = "Enable merge archive intead of linking for all dependent targets.", default = false, type = "boolean"},
             -- C/C++ build cache
             ["build.ccache"]                      = {description = "Enable C/C++ build cache.", type = "boolean"},
+            -- Use global storage if build.ccache is enabled
+            ["build.ccache.global_storage"]       = {description = "Use global storge if build.ccache is enabled.", type = "boolean"},
             -- Enable build warning output, it's disabled by default and we need `xmake -w/-vD` to look at it.
             ["build.warning"]                     = {description = "Enable build warning output.", type = "boolean"},
             -- Enable LTO linker-time optimization for c/c++ building.
             ["build.optimization.lto"]            = {description = "Enable LTO linker-time optimization for c/c++ building.", type = "boolean"},
+            -- Enable address sanitizer for c/c++ building.
+            ["build.sanitizer.address"]           = {description = "Enable address sanitizer for c/c++ building.", type = "boolean"},
+            -- Enable thread sanitizer for c/c++ building.
+            ["build.sanitizer.thread"]            = {description = "Enable thread sanitizer for c/c++ building.", type = "boolean"},
+            -- Enable memort sanitizer for c/c++ building.
+            ["build.sanitizer.memory"]            = {description = "Enable memory sanitizer for c/c++ building.", type = "boolean"},
+            -- Enable leak sanitizer for c/c++ building.
+            ["build.sanitizer.leak"]              = {description = "Enable leak sanitizer for c/c++ building.", type = "boolean"},
+            -- Enable undefined sanitizer for c/c++ building.
+            ["build.sanitizer.undefined"]         = {description = "Enable undefined sanitizer for c/c++ building.", type = "boolean"},
             -- Enable C++ modules for C++ building, even if no .mpp is involved in the compilation
             ["build.c++.modules"]                 = {description = "Enable C++ modules for C++ building.", type = "boolean"},
             -- Enable clang std modulemap
@@ -66,6 +78,8 @@ function policy.policies()
             ["build.c++.gcc.modules.cxx11abi"]    = {description = "Force to enable new cxx11 abi in C++ modules for gcc.", type = "boolean"},
             -- Enable cuda device link
             ["build.cuda.devlink"]                = {description = "Enable Cuda devlink.", type = "boolean"},
+            -- Automatically build before running
+            ["run.autobuild"]                     = {description = "Automatically build before running.", type = "boolean"},
             -- Preprocessor configuration for ccache/distcc, we can disable linemarkers to speed up preprocess
             ["preprocessor.linemarkers"]          = {description = "Enable linemarkers for preprocessor.", default = true, type = "boolean"},
             -- Preprocessor configuration for ccache/distcc, we can disable it to avoid cache object file with __DATE__, __TIME__
@@ -98,7 +112,9 @@ function policy.policies()
             ["package.librarydeps.strict_compatibility"] = {description = "Set strict compatibility for package and it's all library dependencies.", type = "boolean"},
             -- Automatically passes dependency configuration for inner xmake package
             -- https://github.com/xmake-io/xmake/issues/3952
-            ["package.xmake.pass_depconfs"] = {description = "Automatically passes dependency configuration for inner xmake package", default = true, type = "boolean"}
+            ["package.xmake.pass_depconfs"] = {description = "Automatically passes dependency configuration for inner xmake package", default = true, type = "boolean"},
+            -- will force cmake package use ninja for build
+            ["package.cmake_generator.ninja"] = {description = "Set cmake package use ninja for build", default = false, type = "boolean"}
         }
         policy._POLICIES = policies
     end

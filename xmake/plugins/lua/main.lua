@@ -22,6 +22,7 @@
 import("core.base.option")
 import("core.sandbox.module")
 import("core.sandbox.sandbox")
+import("core.project.project")
 
 -- get all lua scripts
 function scripts()

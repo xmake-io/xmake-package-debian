@@ -131,26 +131,37 @@ end
 
 -- add module directories
 function project._api_add_moduledirs(interp, ...)
-    sandbox_module.add_directories(...)
+    local scriptdir = project.interpreter():scriptdir()
+    for _, dir in ipairs({...}) do
+        if not path.is_absolute(dir) then
+            dir = path.absolute(dir, scriptdir)
+        end
+        sandbox_module.add_directories(dir)
+    end
 end
 
 -- add plugin directories load all plugins from the given directories
 function project._api_add_plugindirs(interp, ...)
-
-    -- get all directories
+    local scriptdir = project.interpreter():scriptdir()
     local plugindirs = {}
-    local dirs = table.join(...)
-    for _, dir in ipairs(dirs) do
+    for _, dir in ipairs({...}) do
+        if not path.is_absolute(dir) then
+            dir = path.absolute(dir, scriptdir)
+        end
         table.insert(plugindirs, dir .. "/*")
     end
-
-    -- add all plugins
     interp:api_builtin_includes(plugindirs)
 end
 
 -- add platform directories
 function project._api_add_platformdirs(interp, ...)
-    platform.add_directories(...)
+    local scriptdir = project.interpreter():scriptdir()
+    for _, dir in ipairs({...}) do
+        if not path.is_absolute(dir) then
+            dir = path.absolute(dir, scriptdir)
+        end
+        platform.add_directories(dir)
+    end
 end
 
 -- load the project file
@@ -815,23 +826,47 @@ end
 function project.policy(name)
     local policies = project._memcache():get("policies")
     if not policies then
+
         -- get policies from project, e.g. set_policy("xxx", true)
         policies = project.get("target.policy")
+
         -- get policies from config, e.g. xmake f --policies=package.precompiled:n,package.install_only
         -- @see https://github.com/xmake-io/xmake/issues/2318
         local policies_config = config.get("policies")
         if policies_config then
             for _, policy in ipairs(policies_config:split(",", {plain = true})) do
                 local splitinfo = policy:split(":", {limit = 2})
+                local name = splitinfo[1]
                 if #splitinfo > 1 then
                     policies = policies or {}
-                    policies[splitinfo[1]] = baseoption.boolean(splitinfo[2])
+                    policies[name] = baseoption.boolean(splitinfo[2])
                 else
                     policies = policies or {}
-                    policies[splitinfo[1]] = true
+                    policies[name] = true
                 end
             end
         end
+
+        -- get policies from global, e.g. xmake g --policies=run.autobuild
+        local policies_config_global = global.get("policies")
+        if policies_config_global then
+            for _, policy in ipairs(policies_config_global:split(",", {plain = true})) do
+                local splitinfo = policy:split(":", {limit = 2})
+                local name = splitinfo[1]
+                if #splitinfo > 1 then
+                    policies = policies or {}
+                    if policies[name] == nil then
+                        policies[name] = baseoption.boolean(splitinfo[2])
+                    end
+                else
+                    policies = policies or {}
+                    if policies[name] == nil then
+                        policies[name] = true
+                    end
+                end
+            end
+        end
+
         project._memcache():set("policies", policies)
         if policies then
             local defined_policies = policy.policies()

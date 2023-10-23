@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set_project "xmake"
-set_version "2.8.2" "%Y%m%d"
+set_version "2.8.3" "%Y%m%d"
 
 # set warning all
 set_warnings "all"
@@ -27,12 +27,6 @@ else
         set_symbols "hidden"
     fi
     set_optimizes "smallest"
-    # we cannot enable LTO on macOS arm64
-    if is_plat "macosx" && ! is_arch "arm64"; then
-        add_cxflags "-flto"
-        add_mxflags "-flto"
-        add_ldflags "-flto"
-    fi
 fi
 
 # the runtime option, lua or luajit

@@ -900,7 +900,12 @@ function _add_target_link_options(cmakelists, target)
             end
             for _, flag in ipairs(flags) do
                 flag = _escape_path_in_flag(target, flag)
-                cmakelists:print("    " .. flag)
+                -- @see https://github.com/xmake-io/xmake/issues/4196
+                if cmake_minver:ge("3.12.0") and #os.argv(flag) > 1 then
+                    cmakelists:print("    " .. os.args("SHELL:" .. flag))
+                else
+                    cmakelists:print("    " .. flag)
+                end
             end
             cmakelists:print(")")
         end
@@ -917,7 +922,7 @@ function _get_command_string(cmd, outputdir)
         for _, v in ipairs(cmd.argv) do
             table.insert(argv, _translate_flag(v, outputdir))
         end
-        local command = _get_relative_unix_path_to_cmake(cmd.program) .. " " .. os.args(argv)
+        local command = _escape_path(cmd.program) .. " " .. os.args(argv)
         if opt and opt.curdir then
             command = "${CMAKE_COMMAND} -E chdir " .. _get_relative_unix_path_to_cmake(opt.curdir, outputdir) .. " " .. command
         end

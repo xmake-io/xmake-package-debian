@@ -128,6 +128,8 @@ function nf_warning(self, level)
     ,   more       = "-Wall"
     ,   all        = "-Wall"
     ,   allextra   = {"-Wall", "-Wextra"}
+    ,   extra      = "-Wextra"
+    ,   pedantic   = "-Wpedantic"
     ,   everything = self:kind() == "cxx" and {"-Wall", "-Wextra", "-Weffc++"} or {"-Wall", "-Wextra"}
     ,   error      = "-Werror"
     }
@@ -211,6 +213,8 @@ function nf_language(self, stdname)
         _g.cxxmaps = {
             cxx98        = "-std=c++98"
         ,   gnuxx98      = "-std=gnu++98"
+        ,   cxx03        = "-std=c++03"
+        ,   gnuxx03      = "-std=gnu++03"
         ,   cxx11        = "-std=c++11"
         ,   gnuxx11      = "-std=gnu++11"
         ,   cxx14        = "-std=c++14"
@@ -717,13 +721,6 @@ function _compargv_pch(self, pcheaderfile, pcoutputfile, flags)
     return self:program(), table.join("-c", pchflags, "-o", pcoutputfile, pcheaderfile)
 end
 
--- get modules cache directory
-function _modules_cachedir(target)
-    if target and target.autogendir and target:data("cxx.has_modules") then -- we need to ignore option instance
-        return path.join(target:autogendir(), "rules", "modules", "cache")
-    end
-end
-
 -- make the compile arguments list
 function compargv(self, sourcefile, objectfile, flags)
     -- precompiled header?
@@ -827,7 +824,6 @@ function compile(self, sourcefile, objectfile, dependinfo, flags, opt)
                 if depfile and os.isfile(depfile) then
                     if dependinfo then
                         dependinfo.depfiles_gcc = io.readfile(depfile, {continuation = "\\"})
-                        dependinfo.modules_cachedir = _modules_cachedir(opt.target)
                     end
 
                     -- remove the temporary dependent file

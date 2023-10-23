@@ -32,7 +32,7 @@ function _get_librarydeps(target)
     for _, depname in ipairs(target:get("deps")) do
         local dep = project.target(depname)
         if not ((target:is_binary() or target:is_shared()) and dep:is_static()) then
-            table.insert(librarydeps, dep:name())
+            table.insert(librarydeps, dep:name():lower())
         end
     end
     return librarydeps
@@ -66,6 +66,25 @@ function _package_remote(target)
         end
         if #deps > 0 then
             file:print("    add_deps(\"%s\")", table.concat(deps, "\", \""))
+        end
+        -- export packages as deps, @see https://github.com/xmake-io/xmake/issues/4202
+        local interface
+        if target:is_shared() then
+            interface = true
+        end
+        for _, pkg in ipairs(target:orderpkgs({interface = interface})) do
+            local requireconf_str
+            local requireconf = pkg:requireconf()
+            if requireconf then
+                local conf = table.clone(requireconf)
+                conf.alias = nil
+                requireconf_str = string.serialize(conf, {indent = false, strip = true})
+            end
+            if requireconf_str and requireconf_str ~= "{}" then
+                file:print("    add_deps(\"%s\", %s)", pkg:requirestr(), requireconf_str)
+            else
+                file:print("    add_deps(\"%s\")", pkg:requirestr())
+            end
         end
         file:print("")
         local url = option.get("url") or "https://github.com/myrepo/foo.git"
@@ -105,8 +124,10 @@ function _package_target(target)
         ,   headeronly = _package_remote
         }
         local kind = target:kind()
-        assert(scripts[kind], "this target(%s) with kind(%s) can not be packaged!", target:name(), kind)
-        scripts[kind](target)
+        local script = scripts[kind]
+        if script then
+            script(target)
+        end
     end
 end
 

@@ -24,6 +24,7 @@ import("core.tool.toolchain")
 import("core.project.config")
 import("core.tool.linker")
 import("core.tool.compiler")
+import("core.project.project")
 import("lib.detect.find_file")
 import("lib.detect.find_tool")
 import("package.tools.ninja")
@@ -162,6 +163,9 @@ function _get_cflags(package, opt)
     if package:config("lto") then
         table.join2(result, package:_generate_lto_configs("cc").cflags)
     end
+    if package:config("asan") then
+        table.join2(result, package:_generate_sanitizer_configs("address", "cc").cflags)
+    end
     table.join2(result, _get_cflags_from_packagedeps(package, opt))
     if #result > 0 then
         return os.args(result)
@@ -189,6 +193,9 @@ function _get_cxxflags(package, opt)
     end
     if package:config("lto") then
         table.join2(result, package:_generate_lto_configs("cxx").cxxflags)
+    end
+    if package:config("asan") then
+        table.join2(result, package:_generate_sanitizer_configs("address", "cxx").cxxflags)
     end
     table.join2(result, _get_cflags_from_packagedeps(package, opt))
     if #result > 0 then
@@ -229,6 +236,9 @@ function _get_ldflags(package, opt)
     if package:config("lto") then
         table.join2(result, package:_generate_lto_configs().ldflags)
     end
+    if package:config("asan") then
+        table.join2(result, package:_generate_sanitizer_configs("address").ldflags)
+    end
     table.join2(result, _get_ldflags_from_packagedeps(package, opt))
     if opt.ldflags then
         table.join2(result, opt.ldflags)
@@ -251,6 +261,9 @@ function _get_shflags(package, opt)
     table.join2(result, package:config("shflags"))
     if package:config("lto") then
         table.join2(result, package:_generate_lto_configs().shflags)
+    end
+    if package:config("asan") then
+        table.join2(result, package:_generate_sanitizer_configs("address").shflags)
     end
     table.join2(result, _get_ldflags_from_packagedeps(package, opt))
     if opt.shflags then
@@ -697,7 +710,7 @@ function _get_configs(package, configs, opt)
         _get_configs_for_android(package, configs, opt)
     elseif package:is_plat("iphoneos", "watchos") or
         -- for cross-compilation on macOS, @see https://github.com/xmake-io/xmake/issues/2804
-        (package:is_plat("macosx") and not package:is_arch(os.subarch())) then
+        (package:is_plat("macosx") and (get_config("appledev") or not package:is_arch(os.subarch()))) then
         _get_configs_for_appleos(package, configs, opt)
     elseif package:is_plat("mingw") then
         _get_configs_for_mingw(package, configs, opt)
@@ -739,10 +752,13 @@ function buildenvs(package, opt)
     end
 
     -- add environments for cmake/find_packages
+    -- and we need also find them from private libraries,
+    -- @see https://github.com/xmake-io/xmake-repo/pull/2553
     local CMAKE_LIBRARY_PATH = {}
     local CMAKE_INCLUDE_PATH = {}
     local CMAKE_PREFIX_PATH  = {}
-    for _, dep in ipairs(package:librarydeps()) do
+    local PKG_CONFIG_PATH = {}
+    for _, dep in ipairs(package:librarydeps({private = true})) do
         if dep:is_system() then
             local fetchinfo = dep:fetch()
             if fetchinfo then
@@ -752,11 +768,20 @@ function buildenvs(package, opt)
             end
         else
             table.join2(CMAKE_PREFIX_PATH, dep:installdir())
+            local pkgconfig = path.join(dep:installdir(), "lib", "pkgconfig")
+            if os.isdir(pkgconfig) then
+                table.insert(PKG_CONFIG_PATH, pkgconfig)
+            end
+            pkgconfig = path.join(dep:installdir(), "share", "pkgconfig")
+            if os.isdir(pkgconfig) then
+                table.insert(PKG_CONFIG_PATH, pkgconfig)
+            end
         end
     end
     envs.CMAKE_LIBRARY_PATH = path.joinenv(CMAKE_LIBRARY_PATH)
     envs.CMAKE_INCLUDE_PATH = path.joinenv(CMAKE_INCLUDE_PATH)
     envs.CMAKE_PREFIX_PATH  = path.joinenv(CMAKE_PREFIX_PATH)
+    envs.PKG_CONFIG_PATH    = path.joinenv(PKG_CONFIG_PATH)
     return envs
 end
 
@@ -975,6 +1000,9 @@ function install(package, configs, opt)
 
     -- init options
     opt = opt or {}
+    if (not opt.cmake_generator) and project.policy("package.cmake_generator.ninja") then
+        opt.cmake_generator = "Ninja"
+    end
 
     -- enter build directory
     local buildir = opt.buildir or package:buildir()

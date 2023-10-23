@@ -270,7 +270,14 @@ end
 
 -- get urls
 function _instance:urls()
-    return self._URLS or table.wrap(self:get("urls"))
+    local urls = self._URLS
+    if urls == nil then
+        urls = table.wrap(self:get("urls"))
+        if #urls == 1 and urls[1] == "" then
+            urls = {}
+        end
+    end
+    return urls
 end
 
 -- get urls
@@ -411,8 +418,12 @@ function _instance:plaindeps()
 end
 
 -- get library deps with correct link order
-function _instance:librarydeps()
-    return self._LIBRARYDEPS
+function _instance:librarydeps(opt)
+    if opt and opt.private then
+        return self._LIBRARYDEPS_WITH_PRIVATE
+    else
+        return self._LIBRARYDEPS
+    end
 end
 
 -- get parents
@@ -594,7 +605,7 @@ end
 
 -- is debug package?
 function _instance:is_debug()
-    return self:config("debug")
+    return self:config("debug") or self:config("asan")
 end
 
 -- is the supported package?
@@ -636,6 +647,11 @@ function _instance:use_external_includes()
     end
     if external == nil then
         external = self:policy("package.include_external_headers")
+    end
+    -- disable -Isystem for external packages as it seems to break. e.g. assimp
+    -- @see https://github.com/msys2/MINGW-packages/issues/10761
+    if external == nil and self:is_plat("mingw") and os.is_subhost("msys") then
+        external = false
     end
     if external == nil then
         external = true
@@ -795,6 +811,22 @@ end
 -- get the script directory
 function _instance:scriptdir()
     return self._SCRIPTDIR
+end
+
+-- get the rules directory
+function _instance:rulesdir()
+    local rulesdir = self._RULESDIR
+    if rulesdir == nil then
+        rulesdir = path.join(self:scriptdir(), "rules")
+        if not os.isdir(rulesdir) and self:base() then
+            rulesdir = self:base():rulesdir()
+        end
+        if rulesdir == nil or not os.isdir(rulesdir) then
+            rulesdir = false
+        end
+        self._RULESDIR = rulesdir
+    end
+    return rulesdir or nil
 end
 
 -- get the references info of this package
@@ -1327,9 +1359,44 @@ function _instance:configs()
             configs = {}
             local requireinfo = self:requireinfo()
             local configs_required = requireinfo and requireinfo.configs or {}
-            local ignored_configs = hashset.from(requireinfo and requireinfo.ignored_configs or {})
             for _, name in ipairs(table.wrap(configs_defined)) do
-                if not ignored_configs:has(name) then
+                local value = configs_required[name]
+                if value == nil then
+                    value = self:extraconf("configs", name, "default")
+                end
+                configs[name] = value
+            end
+        else
+            configs = false
+        end
+        self._CONFIGS = configs
+    end
+    return configs and configs or nil
+end
+
+-- get the given configuration value of package for buildhash
+function _instance:_config_for_buildhash(name)
+    local value
+    local configs = self:_configs_for_buildhash()
+    if configs then
+        value = configs[name]
+    end
+    return value
+end
+
+-- get the configurations of package for buildhash
+-- @note on_test still need these configs
+function _instance:_configs_for_buildhash()
+    local configs = self._CONFIGS_FOR_BUILDHASH
+    if configs == nil then
+        local configs_defined = self:get("configs")
+        if configs_defined then
+            configs = {}
+            local requireinfo = self:requireinfo()
+            local configs_required = requireinfo and requireinfo.configs or {}
+            local ignored_configs_for_buildhash = hashset.from(requireinfo and requireinfo.ignored_configs_for_buildhash or {})
+            for _, name in ipairs(table.wrap(configs_defined)) do
+                if not ignored_configs_for_buildhash:has(name) then
                     local value = configs_required[name]
                     if value == nil then
                         value = self:extraconf("configs", name, "default")
@@ -1340,7 +1407,7 @@ function _instance:configs()
         else
             configs = false
         end
-        self._CONFIGS = configs
+        self._CONFIGS_FOR_BUILDHASH = configs
     end
     return configs and configs or nil
 end
@@ -1388,7 +1455,7 @@ function _instance:buildhash()
                     str = str .. "_" .. table.concat(hashs, "_")
                 end
             end
-            local toolchains = self:config("toolchains")
+            local toolchains = self:_config_for_buildhash("toolchains")
             if opt.toolchains ~= false and toolchains then
                 toolchains = table.copy(table.wrap(toolchains))
                 table.sort(toolchains)
@@ -1407,8 +1474,8 @@ function _instance:buildhash()
 
         -- we need to be compatible with the hash value string for the previous xmake version
         -- without builtin pic configuration (< 2.5.1).
-        if self:config("pic") then
-            local configs = table.copy(self:configs())
+        if self:_config_for_buildhash("pic") then
+            local configs = table.copy(self:_configs_for_buildhash())
             configs.pic = nil
             buildhash = _get_buildhash(configs, {sourcehash = false, toolchains = false})
             if not os.isdir(_get_installdir(buildhash)) then
@@ -1419,7 +1486,7 @@ function _instance:buildhash()
         -- we need to be compatible with the hash value string for the previous xmake version
         -- without sourcehash (< 2.5.2)
         if not buildhash then
-            buildhash = _get_buildhash(self:configs(), {sourcehash = false, toolchains = false})
+            buildhash = _get_buildhash(self:_configs_for_buildhash(), {sourcehash = false, toolchains = false})
             if not os.isdir(_get_installdir(buildhash)) then
                 buildhash = nil
             end
@@ -1428,7 +1495,7 @@ function _instance:buildhash()
         -- we need to be compatible with the previous xmake version
         -- without toolchains (< 2.6.4)
         if not buildhash then
-            buildhash = _get_buildhash(self:configs(), {toolchains = false})
+            buildhash = _get_buildhash(self:_configs_for_buildhash(), {toolchains = false})
             if not os.isdir(_get_installdir(buildhash)) then
                 buildhash = nil
             end
@@ -1436,7 +1503,7 @@ function _instance:buildhash()
 
         -- get build hash for current version
         if not buildhash then
-            buildhash = _get_buildhash(self:configs())
+            buildhash = _get_buildhash(self:_configs_for_buildhash())
         end
         self._BUILDHASH = buildhash
     end
@@ -1712,9 +1779,6 @@ function _instance:fetch(opt)
         -- we need ignore `{system = true/false}` argument if be 3rd package
         -- @see https://github.com/xmake-io/xmake/issues/726
         system = nil
-    elseif self:is_cross() then
-        -- we need to disable system package for cross-compilation
-        system = false
     end
 
     -- use sysincludedirs/-isystem instead of -I?
@@ -1738,8 +1802,8 @@ function _instance:fetch(opt)
             end
         end
 
-        -- fetch it from the system directories
-        if not fetchinfo and system ~= false then
+        -- fetch it from the system directories (disabled for cross-compilation)
+        if not fetchinfo and system ~= false and not self:is_cross() then
             fetchinfo = self:_fetch_tool({system = true, require_version = require_ver, force = opt.force})
             if fetchinfo then
                 is_system = true
@@ -1755,8 +1819,8 @@ function _instance:fetch(opt)
             end
         end
 
-        -- fetch it from the system and external package sources
-        if not fetchinfo and system ~= false then
+        -- fetch it from the system and external package sources (disabled for cross-compilation)
+        if not fetchinfo and system ~= false and not self:is_cross() then
             fetchinfo = self:_fetch_library({system = true, require_version = require_ver, external = external, force = opt.force})
             if fetchinfo then
                 is_system = true
@@ -2047,6 +2111,24 @@ function _instance:_generate_lto_configs(sourcekind)
     return configs
 end
 
+-- generate sanitizer configs
+function _instance:_generate_sanitizer_configs(checkmode, sourcekind)
+
+    -- add cflags
+    local configs = {}
+    if sourcekind and self:has_tool(sourcekind, "cl", "clang", "clangxx", "gcc", "gxx") then
+        local cflag = sourcekind == "cxx" and "cxxflags" or "cflags"
+        configs[cflag] = "-fsanitize=" .. checkmode
+    end
+
+    -- add ldflags and shflags
+    if self:has_tool("ld", "link", "clang", "clangxx", "gcc", "gxx") then
+        configs.ldflags = "-fsanitize=" .. checkmode
+        configs.shflags = "-fsanitize=" .. checkmode
+    end
+    return configs
+end
+
 -- generate building configs for has_xxx/check_xxx
 function _instance:_generate_build_configs(configs, opt)
     opt = opt or {}
@@ -2077,6 +2159,15 @@ function _instance:_generate_build_configs(configs, opt)
         local configs_lto = self:_generate_lto_configs(opt.sourcekind or "cxx")
         if configs_lto then
             for k, v in pairs(configs_lto) do
+                configs[k] = table.wrap(configs[k] or {})
+                table.join2(configs[k], v)
+            end
+        end
+    end
+    if self:config("asan") then
+        local configs_asan = self:_generate_sanitizer_configs("address", opt.sourcekind or "cxx")
+        if configs_asan then
+            for k, v in pairs(configs_asan) do
                 configs[k] = table.wrap(configs[k] or {})
                 table.join2(configs[k], v)
             end

@@ -93,13 +93,21 @@ end
 
 -- get configs for appleos
 function _get_configs_for_appleos(package, configs, opt)
-    local appledev = package:config("appledev")
-    if appledev then
-        table.insert(configs, "--appledev=" .. appledev)
+    local xcode = get_config("xcode")
+    if xcode then
+        table.insert(configs, "--xcode=" .. xcode)
+    end
+    local xcode_sdkver = get_config("xcode_sdkver")
+    if xcode_sdkver then
+        table.insert(configs, "--xcode_sdkver=" .. xcode_sdkver)
     end
     local target_minver = get_config("target_minver")
     if target_minver then
         table.insert(configs, "--target_minver=" .. target_minver)
+    end
+    local appledev = get_config("appledev")
+    if appledev then
+        table.insert(configs, "--appledev=" .. appledev)
     end
     _get_configs_for_qt(package, configs, opt)
     _get_configs_for_vcpkg(package, configs, opt)
@@ -134,6 +142,9 @@ end
 -- get configs for generic, e.g. linux, macosx, bsd host platforms
 function _get_configs_for_generic(package, configs, opt)
     local names = {"ld", "sh", "ar", "cc", "cxx", "mm", "mxx"}
+    if package:is_plat("macosx") then
+        table.join2(names, "xcode", "xcode_sdkver", "target_minver", "appledev")
+    end
     for _, name in ipairs(names) do
         local value = get_config(name)
         if value ~= nil then
@@ -213,7 +224,7 @@ function _get_configs(package, configs, opt)
         _get_configs_for_android(package, configs, opt)
     elseif package:is_plat("iphoneos", "watchos", "appletvos") or
         -- for cross-compilation on macOS, @see https://github.com/xmake-io/xmake/issues/2804
-        (package:is_plat("macosx") and not package:is_arch(os.subarch())) then
+        (package:is_plat("macosx") and (get_config("appledev") or not package:is_arch(os.subarch()))) then
         _get_configs_for_appleos(package, configs, opt)
     elseif package:is_plat("mingw") then
         _get_configs_for_mingw(package, configs, opt)
@@ -237,6 +248,13 @@ function _get_configs(package, configs, opt)
             policies = policies .. ",build.optimization.lto"
         else
             policies = "build.optimization.lto"
+        end
+    end
+    if package:config("asan") and (not policies or not policies:find("build.sanitizer.address", 1, true)) then
+        if policies then
+            policies = policies .. ",build.sanitizer.address"
+        else
+            policies = "build.sanitizer.address"
         end
     end
     if not package:use_external_includes() and (not policies or not policies:find("package.include_external_headers", 1, true)) then

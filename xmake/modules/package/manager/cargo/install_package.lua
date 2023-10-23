@@ -24,6 +24,27 @@ import("core.project.config")
 import("lib.detect.find_tool")
 import("private.tools.rust.check_target")
 
+-- translate local path in dependencies
+-- @see https://github.com/xmake-io/xmake/issues/4222
+-- https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html
+--
+-- e.g.
+-- [dependencies]
+-- hello_utils = { path = "./hello_utils", version = "0.1.0" }
+--
+-- [dependencies.my_lib]
+-- path = "../my_lib"
+function _translate_local_path_in_deps(cargotoml, rootdir)
+    local content = io.readfile(cargotoml)
+    content = content:gsub("path%s+=%s+\"(.-)\"", function (localpath)
+        if not path.is_absolute(localpath) then
+            localpath = path.absolute(localpath, rootdir)
+        end
+        return "path = \"" .. localpath .. "\""
+    end)
+    io.writefile(cargotoml, content)
+end
+
 -- install package
 --
 -- e.g.
@@ -65,6 +86,7 @@ function main(name, opt)
     if configs.cargo_toml then
         assert(os.isfile(configs.cargo_toml), "%s not found!", configs.cargo_toml)
         os.cp(configs.cargo_toml, cargotoml)
+        _translate_local_path_in_deps(cargotoml, path.directory(configs.cargo_toml))
         -- we need add `[workspace]` to prevent cargo from searching up for a parent.
         -- https://github.com/rust-lang/cargo/issues/10534#issuecomment-1087631050
         local tomlfile = io.open(cargotoml, "a")
@@ -80,7 +102,6 @@ function main(name, opt)
         tomlfile:print("edition = \"2018\"")
         tomlfile:print("")
         tomlfile:print("[dependencies]")
-        tomlfile:print("")
 
         local features = configs.features
         if features then
@@ -89,6 +110,7 @@ function main(name, opt)
         else
             tomlfile:print("%s = \"%s\"", name, require_version)
         end
+        tomlfile:print("")
         tomlfile:close()
     end
 
@@ -143,4 +165,19 @@ target = "%s"
     else
         os.vcp(path.join(sourcedir, "target", opt.mode == "debug" and "debug" or "release", "deps"), path.join(installdir, "lib"))
     end
+
+    -- install metadata
+    argv = {"metadata", "--format-version", "1", "--manifest-path", cargotoml, "--color", "never"}
+    if target then
+        table.insert(argv, "--filter-platform")
+        table.insert(argv, target)
+    end
+
+    local metadata = os.iorunv(cargo.program, argv, {curdir = sourcedir})
+
+    -- fetch the direct dependencies list regradless of the target platform
+    table.insert(argv, "--no-deps")
+    local metadata_without_deps = os.iorunv(cargo.program, argv, {curdir = sourcedir})
+
+    io.save(path.join(installdir, "metadata.txt"), {metadata = metadata, metadata_without_deps = metadata_without_deps})
 end

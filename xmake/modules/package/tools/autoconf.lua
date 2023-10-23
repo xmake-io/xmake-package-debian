@@ -282,6 +282,11 @@ function buildenvs(package, opt)
         table.join2(cxxflags, package:_generate_lto_configs("cxx").cxxflags)
         table.join2(ldflags, package:_generate_lto_configs().ldflags)
     end
+    if package:config("asan") then
+        table.join2(cflags, package:_generate_sanitizer_configs("address", "cc").cflags)
+        table.join2(cxxflags, package:_generate_sanitizer_configs("address", "cxx").cxxflags)
+        table.join2(ldflags, package:_generate_sanitizer_configs("address").ldflags)
+    end
     envs.CFLAGS    = table.concat(cflags, ' ')
     envs.CXXFLAGS  = table.concat(cxxflags, ' ')
     envs.CPPFLAGS  = table.concat(cppflags, ' ')
@@ -362,7 +367,7 @@ function buildenvs(package, opt)
     end
     local ACLOCAL_PATH = {}
     local PKG_CONFIG_PATH = {}
-    for _, dep in ipairs(package:librarydeps()) do
+    for _, dep in ipairs(package:librarydeps({private = true})) do
         local pkgconfig = path.join(dep:installdir(), "lib", "pkgconfig")
         if os.isdir(pkgconfig) then
             table.insert(PKG_CONFIG_PATH, pkgconfig)
@@ -390,7 +395,7 @@ function autogen_envs(package, opt)
     local envs = {NOCONFIGURE = "yes"}
     local ACLOCAL_PATH = {}
     local PKG_CONFIG_PATH = {}
-    for _, dep in ipairs(package:librarydeps()) do
+    for _, dep in ipairs(package:librarydeps({private = true})) do
         local pkgconfig = path.join(dep:installdir(), "lib", "pkgconfig")
         if os.isdir(pkgconfig) then
             table.insert(PKG_CONFIG_PATH, pkgconfig)

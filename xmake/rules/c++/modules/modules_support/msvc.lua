@@ -100,7 +100,7 @@ function _build_modulefile(target, sourcefile, opt)
     local dependfile = opt.dependfile
     local compinst = compiler.load("cxx", {target = target})
     local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
-    local dependinfo = option.get("rebuild") and {} or (depend.load(dependfile) or {})
+    local dependinfo = target:is_rebuilt() and {} or (depend.load(dependfile) or {})
 
     -- need build this object?
     local dryrun = option.get("dry-run")
@@ -216,7 +216,7 @@ function generate_dependencies(target, sourcebatch, opt)
 
             local dependinfo = io.readfile(jsonfile)
             return { moduleinfo = dependinfo }
-        end, {dependfile = dependfile, files = {sourcefile}})
+        end, {dependfile = dependfile, files = {sourcefile}, changed = target:is_rebuilt()})
     end
     return changed
 end
@@ -274,7 +274,7 @@ function generate_stl_headerunits_for_batchjobs(target, batchjobs, headerunits, 
                 }
                 generate_headerunit_for_batchjob(target, headerunit.name, flags, objectfile, index, total)
 
-            end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}})
+            end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}, changed = target:is_rebuilt()})
             _add_module_to_mapper(target, headerunitflag .. ":angle", headerunit.name, headerunit.name, objectfile, bmifile)
         end, {rootjob = flushjob})
     end
@@ -350,10 +350,9 @@ function generate_user_headerunits_for_batchjobs(target, batchjobs, headerunits,
                     outputdir,
                     "/Fo" .. objectfile
                 }
-                generate_headerunit_for_batchjob(target, headerunit.unique and path.filename(headerunit.name) or headerunit.name, flags, objectfile, index, total)
-
-            end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}})
-            _add_module_to_mapper(target, headerunitflag .. headerunit.type, headerunit.name, headerunit.type == ":quote" and headerunit.path or headerunit.name, objectfile,  bmifile)
+                generate_headerunit_for_batchjob(target, headerunit.name, flags, objectfile, index, total)
+            end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}, changed = target:is_rebuilt()})
+            _add_module_to_mapper(target, headerunitflag, headerunit.name, headerunit.path, objectfile,  bmifile)
         end, {rootjob = flushjob})
     end
 end
@@ -386,10 +385,10 @@ function generate_user_headerunits_for_batchcmds(target, batchcmds, headerunits,
             outputdir,
             "/Fo" .. objectfile
         }
-        generate_headerunit_for_batchcmds(target, headerunit.unique and path.filename(headerunit.name) or headerunit.name, flags, objectfile, batchcmds, opt)
+        generate_headerunit_for_batchcmds(target, headerunit.name, flags, objectfile, batchcmds, opt)
         batchcmds:add_depfiles(headerunit.path)
 
-        _add_module_to_mapper(target, headerunitflag .. headerunit.type, headerunit.name, headerunit.type == ":quote" and headerunit.path or headerunit.name, objectfile,  bmifile)
+        _add_module_to_mapper(target, headerunitflag, headerunit.name, headerunit.path, objectfile,  bmifile)
 
         depmtime = math.max(depmtime, os.mtime(bmifile))
     end
@@ -455,7 +454,7 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                             progress.show((index * 100) / total, "${color.build.object}generating.module.metadata %s", name)
                             local metadata = common.generate_meta_module_info(target, name, cppfile, module.requires)
                             json.savefile(metafilepath, metadata)
-                        end, {dependfile = target:dependfile(metafilepath), files = {cppfile}})
+                        end, {dependfile = target:dependfile(metafilepath), files = {cppfile}, changed = target:is_rebuilt()})
                     end, {rootjob = flushjob})
                 end
             end
@@ -558,6 +557,8 @@ function build_modules_for_batchcmds(target, batchcmds, objectfiles, modules, op
                 _add_objectfile_to_link_arguments(target, path.translate(objectfile))
                 if provide then
                     _add_module_to_mapper(target, referenceflag, name, name, objectfile, provide.bmi, requiresflags)
+                    -- add requiresflags to module. it will be used for project generation
+                    target:fileconfig_add(cppfile, {force = {cxxflags = requiresflags}})
                 end
                 depmtime = math.max(depmtime, os.mtime(provide and provide.bmi or objectfile))
             elseif requiresflags then
