@@ -95,15 +95,15 @@ end
 -- diff files
 function server_session:diff(respmsg)
     local body = respmsg:body()
-    vprint("%s: diff files in %s ..", self, self:sourcedir())
 
     -- ensure sourcedir
     self:_ensure_sourcedir()
 
     -- do snapshot
-    local filesync = self:_filesync()
+    local filesync = body.xmakesrc and self:_xmake_filesync() or self:_filesync()
     local manifest_server = assert(filesync:snapshot(), "server manifest not found!")
     local manifest_client = assert(body.manifest, "client manifest not found!")
+    vprint("%s: diff files in %s ..", self, filesync:rootdir())
 
     -- get all files
     local fileitems = hashset.new()
@@ -146,10 +146,10 @@ function server_session:sync(respmsg)
     local body = respmsg:body()
     local stream = self:stream()
     local manifest = assert(body.manifest, "manifest not found!")
-    local filesync = self:_filesync()
-    local sourcedir = self:sourcedir()
+    local filesync = body.xmakesrc and self:_xmake_filesync() or self:_filesync()
+    local sourcedir = body.xmakesrc and self:xmake_sourcedir() or self:sourcedir()
     local archivedir = os.tmpfile() .. ".dir"
-    vprint("%s: sync files in %s ..", self, self:sourcedir())
+    vprint("%s: sync files in %s ..", self, sourcedir)
     if self:_recv_syncfiles(manifest, archivedir) then
 
         -- do sync
@@ -218,9 +218,19 @@ function server_session:pull(respmsg)
 end
 
 -- clean files
-function server_session:clean()
+function server_session:clean(respmsg)
+    local body = respmsg:body()
     vprint("%s: clean files in %s ..", self, self:workdir())
-    os.tryrm(self:workdir())
+    os.tryrm(self:sourcedir())
+    os.tryrm(path.join(self:workdir(), "manifest.txt"))
+    if body.all then
+        for _, sessiondir in ipairs(os.dirs(path.join(self:server():workdir(), "sessions", "*"))) do
+            os.tryrm(path.join(sessiondir, "source"))
+            os.tryrm(path.join(sessiondir, "manifest.txt"))
+        end
+        os.tryrm(self:xmake_sourcedir())
+        os.tryrm(path.join(self:server():workdir(), "xmakesrc_manifest.txt"))
+    end
     vprint("%s: clean files ok", self)
 end
 
@@ -245,7 +255,12 @@ function server_session:runcmd(respmsg)
     end)
 
     -- run program
-    os.execv(program, argv, {curdir = self:sourcedir(), stdout = stdout_wpipe, stdin = stdin_rpipe, envs = {XMAKE_IN_SERVICE = "true"}})
+    local xmakesrc
+    if os.isfile(path.join(self:xmake_sourcedir(), "core", "main.lua")) then
+        xmakesrc = self:xmake_sourcedir()
+    end
+    os.execv(program, argv, {curdir = self:sourcedir(), stdout = stdout_wpipe, stderr = stdout_wpipe, stdin = stdin_rpipe,
+        envs = {XMAKE_IN_SERVICE = "true", XMAKE_PROGRAM_DIR = xmakesrc}})
     stdin_rpipe:close()
     stdout_wpipe:close()
 
@@ -297,9 +312,19 @@ function server_session:sourcedir()
     return path.join(self:workdir(), "source")
 end
 
+-- get xmake sourcedir directory
+function server_session:xmake_sourcedir()
+    return self:server():xmake_sourcedir()
+end
+
 -- get filesync
 function server_session:_filesync()
     return self._FILESYNC
+end
+
+-- get xmake filesync
+function server_session:_xmake_filesync()
+    return self:server():_xmake_filesync()
 end
 
 -- ensure source directory
@@ -307,6 +332,10 @@ function server_session:_ensure_sourcedir()
     local sourcedir = self:sourcedir()
     if not os.isdir(sourcedir) then
         os.mkdir(sourcedir)
+    end
+    local xmake_sourcedir = self:xmake_sourcedir()
+    if not os.isdir(xmake_sourcedir) then
+        os.mkdir(xmake_sourcedir)
     end
 end
 

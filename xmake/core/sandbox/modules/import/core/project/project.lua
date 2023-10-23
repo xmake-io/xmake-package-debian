@@ -112,7 +112,7 @@ function sandbox_core_project.check_options()
 
     -- check all options
     local jobs = baseoption.get("jobs") or os.default_njob()
-    import("private.async.runjobs", {anonymous = true})("check_options", instance:fork(checktask):script(), {total = #options, comax = jobs})
+    import("async.runjobs", {anonymous = true})("check_options", instance:fork(checktask):script(), {total = #options, comax = jobs})
 
     -- save all options to the cache file
     option.save()
@@ -125,24 +125,35 @@ function sandbox_core_project.check_options()
 end
 
 -- config target
-function sandbox_core_project._config_target(target)
+function sandbox_core_project._config_target(target, opt)
     for _, rule in ipairs(table.wrap(target:orderules())) do
         local on_config = rule:script("config")
         if on_config then
-            on_config(target)
+            on_config(target, opt)
         end
     end
     local on_config = target:script("config")
     if on_config then
-        on_config(target)
+        on_config(target, opt)
     end
 end
 
 -- config targets
-function sandbox_core_project._config_targets()
+--
+-- @param opt   the extra option, e.g. {recheck = false}
+--
+-- on_config(target, opt)
+--    -- @see https://github.com/xmake-io/xmake/issues/4173#issuecomment-1712843956
+--    if opt.recheck then
+--        target:has_cfuncs(...)
+--    end
+-- end
+--
+function sandbox_core_project._config_targets(opt)
+    opt = opt or {}
     for _, target in ipairs(table.wrap(project.ordertargets())) do
         if target:is_enabled() then
-            sandbox_core_project._config_target(target)
+            sandbox_core_project._config_target(target, opt)
         end
     end
 end
@@ -187,13 +198,13 @@ function sandbox_core_project._load_package_rules_for_targets()
 end
 
 -- load project targets
-function sandbox_core_project.load_targets()
+function sandbox_core_project.load_targets(opt)
 
     -- load package rules for targets
     sandbox_core_project._load_package_rules_for_targets()
 
     -- config targets
-    sandbox_core_project._config_targets()
+    sandbox_core_project._config_targets(opt)
 end
 
 -- get the filelock of the whole project directory

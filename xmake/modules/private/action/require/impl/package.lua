@@ -296,13 +296,13 @@ end
 --
 -- orderdeps: a -> b -> c
 --
-function _sort_librarydeps(package)
+function _sort_librarydeps(package, opt)
     -- we must use native deps list instead of package:deps() to generate correct link order
     local orderdeps = {}
     for _, dep in ipairs(package:plaindeps()) do
-        if dep and dep:is_library() and not dep:is_private() then
+        if dep and dep:is_library() and (opt and opt.private or not dep:is_private()) then
             table.insert(orderdeps, dep)
-            table.join2(orderdeps, _sort_librarydeps(dep))
+            table.join2(orderdeps, _sort_librarydeps(dep, opt))
         end
     end
     return orderdeps
@@ -327,6 +327,9 @@ function _add_package_configurations(package)
     end
     if package:extraconf("configs", "lto", "default") == nil then
         package:add("configs", "lto", {builtin = true, description = "Enable the link-time build optimization.", type = "boolean"})
+    end
+    if package:extraconf("configs", "asan", "default") == nil then
+        package:add("configs", "asan", {builtin = true, description = "Enable the address sanitizer.", type = "boolean"})
     end
     if package:extraconf("configs", "vs_runtime", "default") == nil then
         package:add("configs", "vs_runtime", {builtin = true, description = "Set vs compiler runtime.", values = {"MT", "MTd", "MD", "MDd"}})
@@ -500,10 +503,12 @@ function _init_requireinfo(requireinfo, package, opt)
             requireinfo.configs.vs_runtime = requireinfo.configs.vs_runtime or get_config("vs_runtime")
         end
         requireinfo.configs.lto = requireinfo.configs.lto or project.policy("build.optimization.lto")
+        requireinfo.configs.asan = requireinfo.configs.asan or project.policy("build.sanitizer.address")
     end
     -- but we will ignore some configs for buildhash in the headeronly and host/binary package
+    -- @note on_test still need these configs, @see https://github.com/xmake-io/xmake/issues/4124
     if package:is_headeronly() or (package:is_binary() and not package:is_cross()) then
-        requireinfo.ignored_configs = {"vs_runtime", "toolchains", "lto", "pic"}
+        requireinfo.ignored_configs_for_buildhash = {"vs_runtime", "toolchains", "lto", "asan", "pic"}
     end
 end
 
@@ -651,6 +656,7 @@ function _inherit_parent_configs(requireinfo, package, parentinfo)
         requireinfo_configs.toolchains = requireinfo_configs.toolchains or parentinfo_configs.toolchains
         requireinfo_configs.vs_runtime = requireinfo_configs.vs_runtime or parentinfo_configs.vs_runtime
         requireinfo_configs.lto = requireinfo_configs.lto or parentinfo_configs.lto
+        requireinfo_configs.asan = requireinfo_configs.asan or parentinfo_configs.asan
         requireinfo.configs = requireinfo_configs
     end
 end
@@ -935,6 +941,7 @@ function _load_packages(requires, opt)
                     package._PLAINDEPS = plaindeps
                     package._ORDERDEPS = table.unique(_sort_packagedeps(package))
                     package._LIBRARYDEPS = table.reverse_unique(_sort_librarydeps(package))
+                    package._LIBRARYDEPS_WITH_PRIVATE = table.reverse_unique(_sort_librarydeps(package, {private = true}))
                 end
             end
 
@@ -1151,9 +1158,9 @@ function get_configs_str(package)
         if requireinfo.kind then
             table.insert(configs, requireinfo.kind)
         end
-        local ignored_configs = hashset.from(requireinfo.ignored_configs or {})
+        local ignored_configs_for_buildhash = hashset.from(requireinfo.ignored_configs_for_buildhash or {})
         for k, v in pairs(requireinfo.configs) do
-            if not ignored_configs:has(k) then
+            if not ignored_configs_for_buildhash:has(k) then
                 if type(v) == "boolean" then
                     table.insert(configs, k .. ":" .. (v and "y" or "n"))
                 else

@@ -113,7 +113,7 @@ end
 -- @note we need to use batchcmds:compilev to translate paths in compflags for generator, e.g. -Ixx
 function _batchcmds_compile(batchcmds, target, flags, sourcefile)
     local compinst = target:compiler("cxx")
-    local compflags = compinst:compflags({sourcefile = sourcefile}, {target = target})
+    local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
     batchcmds:compilev(table.join(compflags or {}, flags), {compiler = compinst, sourcekind = "cxx"})
 end
 
@@ -123,7 +123,7 @@ function _build_modulefile(target, sourcefile, opt)
     local dependfile = opt.dependfile
     local compinst = compiler.load("cxx", {target = target})
     local compflags = table.join("-x", "c++", compinst:compflags({sourcefile = sourcefile, target = target}))
-    local dependinfo = option.get("rebuild") and {} or (depend.load(dependfile) or {})
+    local dependinfo = target:is_rebuilt() and {} or (depend.load(dependfile, {target = target}) or {})
 
     -- need build this object?
     local dryrun = option.get("dry-run")
@@ -219,7 +219,7 @@ function generate_dependencies(target, sourcebatch, opt)
 
             local dependinfo = io.readfile(jsonfile)
             return { moduleinfo = dependinfo }
-        end, {dependfile = dependfile, files = {sourcefile}})
+        end, {dependfile = dependfile, files = {sourcefile}, changed = target:is_rebuilt()})
     end
     return changed
 end
@@ -255,7 +255,7 @@ function generate_stl_headerunits_for_batchjobs(target, batchjobs, headerunits, 
                     os.vrunv(compinst:program(), flags)
                     _add_module_to_mapper(mapper_file, headerunit.path, path.absolute(bmifile, projectdir))
                     os.tryrm(mapper_file_tmp)
-                end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}})
+                end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}, changed = target:is_rebuilt()})
             end, {rootjob = opt.rootjob})
         else
             _add_module_to_mapper(mapper_file, headerunit.path, path.absolute(bmifile, projectdir))
@@ -331,7 +331,7 @@ function generate_user_headerunits_for_batchjobs(target, batchjobs, headerunits,
                 end
                 os.vrunv(compinst:program(), table.join(compinst:compflags({target = target}), args))
 
-            end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}})
+            end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}, changed = target:is_rebuilt()})
         end, {rootjob = opt.rootjob})
         _add_module_to_mapper(mapper_file, headerunit_path, path.absolute(bmifile, projectdir))
     end
@@ -421,7 +421,7 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                             progress.show((index * 100) / total, "${color.build.object}generating.module.metadata %s", name)
                             local metadata = common.generate_meta_module_info(target, name, cppfile, module.requires)
                             json.savefile(metafilepath, metadata)
-                        end, {dependfile = target:dependfile(metafilepath), files = {cppfile}})
+                        end, {dependfile = target:dependfile(metafilepath), files = {cppfile}, changed = target:is_rebuilt()})
                     end, {rootjob = opt.rootjob})
                 end
             end
@@ -511,13 +511,13 @@ function build_modules_for_batchcmds(target, batchcmds, objectfiles, modules, op
                     break
                 end
             end
-            local flags = {"-x", "c++", "-c", path(cppfile), "-o", path(objectfile)}
-            batchcmds:show_progress(opt.progress, "${color.build.object}compiling.module.$(mode) %s", name or cppfile)
-            batchcmds:mkdir(path.directory(objectfile))
-            _batchcmds_compile(batchcmds, target, flags)
-            batchcmds:add_depfiles(cppfile)
-            target:add("objectfiles", objectfile)
-            if provide then
+            if provide or common.has_module_extension(cppfile) then
+                local flags = {"-x", "c++", "-c", path(cppfile), "-o", path(objectfile)}
+                batchcmds:show_progress(opt.progress, "${color.build.object}compiling.module.$(mode) %s", name or cppfile)
+                batchcmds:mkdir(path.directory(objectfile))
+                _batchcmds_compile(batchcmds, target, flags, cppfile)
+                batchcmds:add_depfiles(cppfile)
+                target:add("objectfiles", objectfile)
                 _add_module_to_mapper(mapper_file, name, path.absolute(provide.bmi, projectdir))
             end
             depmtime = math.max(depmtime, os.mtime(provide and provide.bmi or objectfile))

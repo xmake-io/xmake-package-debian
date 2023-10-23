@@ -26,7 +26,7 @@ import("core.base.global")
 import("core.project.project")
 import("core.platform.platform")
 import("devel.debugger")
-import("private.async.runjobs")
+import("async.runjobs")
 import("private.action.run.runenvs")
 import("private.service.remote_build.action", {alias = "remote_build_action"})
 
@@ -207,6 +207,14 @@ function main()
 
     -- load config first
     config.load()
+
+    -- Automatically build before running
+    if project.policy("run.autobuild") then
+        -- we need clear the previous config and reload it
+        -- to avoid trigger recheck configs
+        config.clear()
+        task.run("build")
+    end
 
     -- load targets
     project.load_targets()

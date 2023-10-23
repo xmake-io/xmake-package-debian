@@ -50,7 +50,7 @@ function detect()
     local packagename = dirname
     local version = semver.match(dirname)
     if version then
-        local pos = dirname:find(version:rawstr(), 1, true)
+        local pos = dirname:find("v" .. version:rawstr(), 1, true) or dirname:find(version:rawstr(), 1, true)
         if pos then
             packagename = dirname:sub(1, pos - 1)
             if packagename:endswith("-") or packagename:endswith("_") then
@@ -68,16 +68,9 @@ function detect()
     local packages_found = search_packages(packagename, {require_version = version and version:rawstr() or nil})
     for name, packages in pairs(packages_found) do
         for _, package in ipairs(packages) do
-            if package.name == packagename then
+            if package.name == packagename or packagename:levenshtein(package.name) < 3 then
                 result = package
                 break
-            end
-        end
-    end
-    if not result then
-        for name, packages in pairs(packages_found) do
-            if #packages > 0 then
-                result = packages[1]
             end
         end
     end

@@ -24,7 +24,7 @@ import("core.theme.theme")
 import("core.tool.compiler")
 import("core.project.depend")
 import("private.cache.build_cache")
-import("private.async.runjobs")
+import("async.runjobs")
 import("utils.progress")
 import("private.service.distcc_build.client", {alias = "distcc_build_client"})
 
@@ -43,7 +43,7 @@ function _do_build_file(target, sourcefile, opt)
     local compflags = compinst:compflags({target = target, sourcefile = sourcefile, configs = opt.configs})
 
     -- load dependent info
-    local dependinfo = option.get("rebuild") and {} or (depend.load(dependfile) or {})
+    local dependinfo = target:is_rebuilt() and {} or (depend.load(dependfile, {target = target}) or {})
 
     -- dry run?
     local dryrun = option.get("dry-run")

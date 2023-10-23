@@ -67,7 +67,8 @@ function _find_xcode_sdkver(sdkdir, opt)
     if platsdkdir then
 	    local dir = find_directory(platsdkdir, sdkdir)
         if dir then
-            return dir:match("%d+%.%d+")
+            local basename = path.basename(dir)
+            return basename:match("%d+%.%d+")
         end
     end
 end
@@ -81,7 +82,8 @@ function _find_target_minver(sdkdir, sdkver, opt)
             local platsdkdir = "Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS*.*.sdk"
             local dir = find_directory(platsdkdir, sdkdir)
             if dir then
-                target_minver = dir:match("%d+%.%d+")
+                local basename = path.basename(dir)
+                target_minver = basename:match("%d+%.%d+")
             else
                 target_minver = "13.1"
             end

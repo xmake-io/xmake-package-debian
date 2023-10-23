@@ -235,7 +235,7 @@ end
 
 -- do compile for batchcmds
 -- @note we need to use batchcmds:compilev to translate paths in compflags for generator, e.g. -Ixx
-function _batchcmds_compile(batchcmds, target, sourcefile, flags)
+function _batchcmds_compile(batchcmds, target, flags, sourcefile)
     local compinst = target:compiler("cxx")
     local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
     batchcmds:compilev(table.join(compflags or {}, flags), {compiler = compinst, sourcekind = "cxx"})
@@ -247,7 +247,7 @@ function _build_modulefile(target, sourcefile, opt)
     local dependfile = opt.dependfile
     local compinst = compiler.load("cxx", {target = target})
     local compflags = compinst:compflags({sourcefile = sourcefile, target = target})
-    local dependinfo = option.get("rebuild") and {} or (depend.load(dependfile) or {})
+    local dependinfo = target:is_rebuilt() and {} or (depend.load(dependfile) or {})
 
     -- need build this object?
     local dryrun = option.get("dry-run")
@@ -270,6 +270,9 @@ function _build_modulefile(target, sourcefile, opt)
     local bmiflags
     if opt.provide then
         bmifile = _get_bmi_path(opt.provide.bmifile)
+        if bmifile then
+            common.memcache():set2(bmifile, "compiling", true)
+        end
         if moduleoutputflag then
             compileflags = table.join("-x", "c++-module", moduleoutputflag .. bmifile, requiresflags)
         else
@@ -293,11 +296,12 @@ function _build_modulefile(target, sourcefile, opt)
         if bmiflags then
             assert(compinst:compile(sourcefile, bmifile, {dependinfo = dependinfo, compflags = bmiflags}))
         end
-        assert(compinst:compile(bmiflags and bmifile or sourcefile, objectfile, {compflags = compileflags}))
+        assert(compinst:compile(bmiflags and bmifile or sourcefile, objectfile, {dependinfo = dependinfo, compflags = compileflags}))
 
         -- update files and values to the dependent file
         dependinfo.values = depvalues
         table.join2(dependinfo.files, sourcefile)
+        table.join2(dependinfo.files, opt.requires or {})
         depend.save(dependinfo, dependfile)
     end
 end
@@ -411,7 +415,7 @@ function generate_dependencies(target, sourcebatch, opt)
             end
 
             return {moduleinfo = rawdependinfo}
-        end, {dependfile = dependfile, files = {sourcefile}})
+        end, {dependfile = dependfile, files = {sourcefile}, changed = target:is_rebuilt()})
     end
     return changed
 end
@@ -442,7 +446,8 @@ function generate_stl_headerunits_for_batchjobs(target, batchjobs, headerunits, 
                         os.vrunv(compinst:program(), table.join(compinst:compflags({target = target}), args))
                     end
 
-                end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}})
+                end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}, changed = target:is_rebuilt()})
+
                 -- libc++ have a builtin module mapper
                 if not _use_stdlib(target, "libc++") then
                     _add_module_to_mapper(target, headerunit.name, bmifile)
@@ -523,7 +528,7 @@ function generate_user_headerunits_for_batchjobs(target, batchjobs, headerunits,
                 end
                 os.vrunv(compinst:program(), table.join(compinst:compflags({target = target}), args))
 
-            end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}})
+            end, {dependfile = target:dependfile(bmifile), files = {headerunit.path}, changed = target:is_rebuilt()})
             _add_module_to_mapper(target, headerunit.name, bmifile)
         end, {rootjob = flushjob})
     end
@@ -614,7 +619,7 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                             progress.show(opt.progress, "${color.build.object}generating.module.metadata %s", name)
                             local metadata = common.generate_meta_module_info(target, name, cppfile, module.requires)
                             json.savefile(metafilepath, metadata)
-                        end, {dependfile = target:dependfile(metafilepath), files = {cppfile}})
+                        end, {dependfile = target:dependfile(metafilepath), files = {cppfile}, changed = target:is_rebuilt()})
                     end, {rootjob = flushjob})
                 end
             end
@@ -626,8 +631,10 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                 job = batchjobs:newjob(name or cppfile, function(index, total)
                     -- @note we add it at the end to ensure that the full modulemap are already stored in the mapper
                     local requiresflags
+                    local requires
                     if module.requires then
                         requiresflags = get_requiresflags(target, module.requires)
+                        requires = get_requires(target, module.requires)
                     end
 
                     if provide or common.has_module_extension(cppfile) then
@@ -642,8 +649,9 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                                 provide = provide and {bmifile = bmifile, name = name},
                                 common_args = common_args,
                                 requiresflags = requiresflags,
+                                requires = requires,
                                 progress = (index * 100) / total})
-                            end
+                        end
                         target:add("objectfiles", objectfile)
 
                         if provide then
@@ -660,6 +668,18 @@ function build_modules_for_batchjobs(target, batchjobs, objectfiles, modules, op
                             end
                         end
                         target:fileconfig_add(cppfile, {force = {cxxflags = cxxflags}})
+
+                        -- force rebuild .cpp file if any of its module dependency is rebuilt
+                        local rebuild = false
+                        for _, requiredfile in ipairs(requires) do
+                            if common.memcache():get2(requiredfile, "compiling") == true then
+                                rebuild = true
+                                break
+                            end
+                        end
+                        if rebuild then
+                           os.tryrm(target:objectfile(cppfile))
+                        end
                     end
                 end)})
             modulesjobs[name or cppfile] = moduleinfo
@@ -708,11 +728,13 @@ function build_modules_for_batchcmds(target, batchcmds, objectfiles, modules, op
                 batchcmds:mkdir(path.directory(objectfile))
                 if provide then
                     _batchcmds_compile(batchcmds, target, table.join(flags,
-                        {"-x", "c++-module", "--precompile", "-c", path(cppfile), "-o", path(provide.bmi)}))
+                        {"-x", "c++-module", "--precompile", "-c", path(cppfile), "-o", path(provide.bmi)}), cppfile)
                     _add_module_to_mapper(target, name, provide.bmi, {namedmodule = true})
+                    -- add requiresflags to module. it will be used for project generation
+                    target:fileconfig_add(cppfile, {force = {cxxflags = requiresflags}})
                 end
-                _batchcmds_compile(batchcmds, target, file, table.join(flags,
-                    not provide and {"-x", "c++"} or {}, {"-c", file, "-o", path(objectfile)}))
+                _batchcmds_compile(batchcmds, target, table.join(flags,
+                    not provide and {"-x", "c++"} or {}, {"-c", file, "-o", path(objectfile)}), file)
                 target:add("objectfiles", objectfile)
             elseif requiresflags then
                 local cxxflags = {}
@@ -910,11 +932,21 @@ function get_moduleoutputflag(target)
     return moduleoutputflag or nil
 end
 
+function get_requires(target, requires)
+    local requires
+    local flags = get_requiresflags(target, requires)
+    for _, flag in ipairs(flags) do
+        requires = requires or {}
+        table.insert(requires, flag:split("=")[3])
+    end
+    return requires
+end
+
 function get_requiresflags(target, requires)
     local flags = {}
     -- add deps required module flags
     local already_mapped_modules = {}
-    for name, _ in pairs(requires) do
+    for name, _ in table.orderpairs(requires) do
         -- if already in flags, continue
         if already_mapped_modules[name] then
             goto continue

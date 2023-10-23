@@ -95,22 +95,41 @@ function _checkout(package, url, sourcedir, opt)
             branch = nil
         end
 
-        -- only shadow clone this branch
-        git.clone(url, {depth = 1, recursive = true, longpaths = longpaths, branch = branch, outputdir = packagedir})
+        -- only shallow clone this branch
+        git.clone(url, {depth = 1, recursive = true, shallow_submodules = true, longpaths = longpaths, branch = branch, outputdir = packagedir})
 
     -- download package from revision or tag?
     else
 
-        -- clone whole history and tags
-        git.clone(url, {longpaths = longpaths, outputdir = packagedir})
+        -- get tag and revision?
+        local tag
+        local revision = package:revision(opt.url_alias)
+        if revision and (#revision ~= 40 or not revision:match("%w+")) then
+            tag = revision
+        end
+        if not tag then
+            tag = package:tag()
+        end
+        if not revision then
+            revision = tag or package:commit() or package:version_str()
+        end
 
-        -- attempt to checkout the given version
-        local revision = package:revision(opt.url_alias) or package:tag() or package:commit() or package:version_str()
-        git.checkout(revision, {repodir = packagedir})
+        -- only shallow clone this tag
+        -- @see https://github.com/xmake-io/xmake/issues/4151
+        if tag and git.clone.can_clone_tag() then
+            git.clone(url, {depth = 1, recursive = true, shallow_submodules = true, longpaths = longpaths, branch = tag, outputdir = packagedir})
+        else
 
-        -- update all submodules
-        if os.isfile(path.join(packagedir, ".gitmodules")) and opt.url_submodules ~= false then
-            git.submodule.update({init = true, recursive = true, longpaths = longpaths, repodir = packagedir})
+            -- clone whole history and tags
+            git.clone(url, {longpaths = longpaths, outputdir = packagedir})
+
+            -- attempt to checkout the given version
+            git.checkout(revision, {repodir = packagedir})
+
+            -- update all submodules
+            if os.isfile(path.join(packagedir, ".gitmodules")) and opt.url_submodules ~= false then
+                git.submodule.update({init = true, recursive = true, longpaths = longpaths, repodir = packagedir})
+            end
         end
     end
 
@@ -212,7 +231,7 @@ function _download(package, url, sourcedir, opt)
         os.mkdir(sourcedir)
         raise("cannot extract %s, maybe missing extractor or invalid package file!", packagefile)
     else
-        -- if it is not archive file, we only need to create empty source file and use package:originfile()
+        -- if it is not archive file, we only need to create empty source directory and use package:originfile()
         os.tryrm(sourcedir)
         os.mkdir(sourcedir)
     end
