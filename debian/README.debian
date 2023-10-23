@@ -8,6 +8,10 @@ xmake (2.8.2+ds-1) unstable; urgency=medium
   * d/rules: Remove permission change for register-completions scripts, fixed
     in upstream
   * d/control: Update maintainer field
+  * d/copyright: Add missing copyright (Mike Pall, Lua.org, PUC-Rio)
+  * d/patches: Forward necessary patches
+  * d/clean: Delete entire build folder instead of individual files
+    + Thanks to Boyuan Yang for this patch
 
  -- Lance Lin <lq27267@gmail.com>  Mon, 28 Aug 2023 20:28:20 +0700
 
