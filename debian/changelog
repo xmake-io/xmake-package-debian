@@ -1,3 +1,9 @@
+xmake (2.8.3+ds-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Lance Lin <lq27267@gmail.com>  Mon, 23 Oct 2023 20:40:41 +0700
+
 xmake (2.8.2+ds-1) unstable; urgency=medium
 
   * Initial release (Closes: #986736).
