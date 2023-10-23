@@ -11,17 +11,20 @@ Files-Excluded: xmake/plugins/project/vsxmake/vsproj/templates/sln/vsxmake.sln
                 core/src/xxhash
 
 Files: *
-Copyright: 2015-2022 ruki <waruqi@gmail.com>
-           2015-2022 TBOOX Open Source Group
+Copyright: 2015-2023 ruki <waruqi@gmail.com>
+           2015-2023 TBOOX Open Source Group
 License: Apache-2
 
 Files: xmake/scripts/gas-preprocessor.pl
 Copyright: David Conrad
 License: GPL-2+
 
-Files: core/src/xmake/io/iscygpty.c
+Files: core/src/xmake/sandbox/interactive.c
        xmake/core/base/compat/env.lua
-Copyright: 2012 David Manura
+       core/src/xmake/io/iscygpty.c
+Copyright: 1994-2008 Lua.org, PUC-Rio
+           2005-2015 Mike Pall
+           2012 David Manura
            2015-2017 K.Takata
 License: Expat
 
