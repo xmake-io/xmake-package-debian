@@ -2,3 +2,4 @@ fix_typos_in_manpages.patch
 replace_unusual_interpreter.patch
 convert_local_source_to_external_dependencies.patch
 fix_sed_on_forward_slash.patch
+add_atomic_option_for_tbox_in_armel.patch

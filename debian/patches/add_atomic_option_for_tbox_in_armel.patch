@@ -1,0 +1,18 @@
+Description: Add atomic option for tbox in armel
+Author: Lance Lin <lq27267@gmail.com>
+Forwarded: https://github.com/xmake-io/xmake/pull/4317/commits/b0aefd8798e906ff78e41f6f0d1d086993a09893
+Date: 25 Oct 2023
+ Thank you Ruki Wang <waruqi@gmail.com> for preparing this patch.
+
+--- a/core/xmake.sh
++++ b/core/xmake.sh
+@@ -196,6 +196,9 @@
+         fi
+         add_cflags "${cflags}"
+         add_ldflags "${ldflags}"
++        if is_plat "linux" && is_arch "arm"; then
++            add_ldflags "-latomic"
++        fi
+     option_end
+ }
+ 
