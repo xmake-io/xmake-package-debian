@@ -15,62 +15,50 @@
 -- Copyright (C) 2015-present, TBOOX Open Source Group.
 --
 -- @author      ruki
--- @file        check_cxxflags.lua
+-- @file        check_cxxincludes.lua
 --
 
--- check c++ flags and add macro definition
+-- check include c++ files and add macro definition
 --
 -- e.g.
 --
--- check_cxxflags("HAS_SSE2", "-msse2")
--- check_cxxflags("HAS_SSE2", {"-msse", "-msse2"})
+-- check_cxxincludes("HAS_STRING_H", "string.h")
+-- check_cxxincludes("HAS_STRING_AND_STDIO_H", {"string.h", "stdio.h"})
 --
-function check_cxxflags(definition, flags, opt)
+function check_cxxincludes(definition, includes, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
+        add_cxxincludes(includes)
         add_defines(definition)
-        on_check(function (option)
-            import("core.tool.compiler")
-            if compiler.has_flags("cxx", flags, opt) then
-                option:enable(true)
-            end
-        end)
     option_end()
-    restore_scope()
+    interp_restore_scope()
     add_options(optname)
 end
 
--- check c++ flags and add macro definition to the configuration flags
+-- check include c++ files and add macro definition to the configuration files
 --
 -- e.g.
 --
--- configvar_check_cxxflags("HAS_SSE2", "-msse2")
--- configvar_check_cxxflags("HAS_SSE2", {"-msse", "-msse2"})
--- configvar_check_cxxflags("HAS_SSE2", "-msse2", {default = 0})
--- configvar_check_cxxflags("SSE_STR=2", "-msse2")
--- configvar_check_cxxflags("SSE=2", "-msse2", {quote = false})
+-- configvar_check_cxxincludes("HAS_STRING_H", "string.h")
+-- configvar_check_cxxincludes("HAS_STRING_H", "string.h", {default = 0})
+-- configvar_check_cxxincludes("HAS_STRING_AND_STDIO_H", {"string.h", "stdio.h"})
 --
-function configvar_check_cxxflags(definition, flags, opt)
+function configvar_check_cxxincludes(definition, includes, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
     local defname, defval = table.unpack(definition:split('='))
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
+        add_cxxincludes(includes)
         if opt.default == nil then
             set_configvar(defname, defval or 1, {quote = opt.quote})
         end
-        on_check(function (option)
-            import("core.tool.compiler")
-            if compiler.has_flags("cxx", flags, opt) then
-                option:enable(true)
-            end
-        end)
     option_end()
-    restore_scope()
+    interp_restore_scope()
     if opt.default == nil then
         add_options(optname)
     else

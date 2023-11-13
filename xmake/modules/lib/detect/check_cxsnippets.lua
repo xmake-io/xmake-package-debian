@@ -240,7 +240,7 @@ function main(snippets, opt)
                 cprint("${dim}> %s", compiler.compcmd(sourcefile, objectfile, opt))
             end
             compiler.compile(sourcefile, objectfile, opt)
-            if #links > 0 or opt.tryrun then
+            if #links > 0 or opt.tryrun or opt.binary_match then
                 if option.get("diagnosis") then
                     cprint("${dim}> %s", linker.linkcmd("binary", {"cc", "cxx"}, objectfile, binaryfile, opt))
                 end
@@ -255,6 +255,14 @@ function main(snippets, opt)
                     return true, output
                 else
                     os.vrun(binaryfile)
+                end
+            end
+            local binary_match = opt.binary_match
+            if binary_match then
+                local content = io.readfile(binaryfile, {encoding = "binary"})
+                local match = type(binary_match) == "function" and binary_match(content) or content:match(binary_match)
+                if match ~= nil then
+                    return true, match
                 end
             end
             return true

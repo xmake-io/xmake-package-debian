@@ -15,26 +15,26 @@
 -- Copyright (C) 2015-present, TBOOX Open Source Group.
 --
 -- @author      ruki
--- @file        check_syslinks.lua
+-- @file        check_links.lua
 --
 
 -- check links and add macro definition
 --
 -- e.g.
 --
--- check_syslinks("HAS_PTHREAD", "pthread")
--- check_syslinks("HAS_PTHREAD", {"pthread", "m", "dl"})
+-- check_links("HAS_PTHREAD", "pthread")
+-- check_links("HAS_PTHREAD", {"pthread", "m", "dl"})
 --
-function check_syslinks(definition, links, opt)
+function check_links(definition, links, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_syslinks(links)
+        add_links(links)
         add_defines(definition)
     option_end()
-    restore_scope()
+    interp_restore_scope()
     add_options(optname)
 end
 
@@ -42,23 +42,23 @@ end
 --
 -- e.g.
 --
--- configvar_check_syslinks("HAS_PTHREAD", "pthread")
--- configvar_check_syslinks("HAS_PTHREAD", "pthread", {default = 0})
--- configvar_check_syslinks("HAS_PTHREAD", {"pthread", "m", "dl"})
+-- configvar_check_links("HAS_PTHREAD", "pthread")
+-- configvar_check_links("HAS_PTHREAD", "pthread", {default = 0})
+-- configvar_check_links("HAS_PTHREAD", {"pthread", "m", "dl"})
 --
-function configvar_check_syslinks(definition, links, opt)
+function configvar_check_links(definition, links, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
     local defname, defval = table.unpack(definition:split('='))
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_syslinks(links)
+        add_links(links)
         if opt.default == nil then
             set_configvar(defname, defval or 1, {quote = opt.quote})
         end
     option_end()
-    restore_scope()
+    interp_restore_scope()
     if opt.default == nil then
         add_options(optname)
     else

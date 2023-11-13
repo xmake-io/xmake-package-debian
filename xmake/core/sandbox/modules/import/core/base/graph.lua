@@ -15,33 +15,8 @@
 -- Copyright (C) 2015-present, TBOOX Open Source Group.
 --
 -- @author      ruki
--- @file        find_and_add_packages.lua
+-- @file        graph.lua
 --
 
--- find and add packages to the given target
---
--- e.g.
---
--- @code
--- includes("find_and_add_packages.lua")
--- target("test")
---     set_kind("binary")
---     add_files("src/*.c")
---     find_and_add_packages("brew::pcre2/libpcre2-8", "zlib")
--- @endcode
---
-function find_and_add_packages(...)
-    for _, name in ipairs({...}) do
-        local optname = "__" .. name
-        save_scope()
-        option(optname)
-            set_showmenu(false)
-            before_check(function (option)
-                option:add(find_packages(name))
-            end)
-        option_end()
-        restore_scope()
-        add_options(optname)
-    end
-end
-
+-- return module
+return require("base/graph")

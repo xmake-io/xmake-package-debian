@@ -641,6 +641,20 @@ function _instance:wait(events, timeout)
     return result, errors
 end
 
+-- kill socket
+function _instance:kill()
+
+    -- ensure opened
+    local ok, errors = self:_ensure_opened()
+    if not ok then
+        return false, errors
+    end
+
+    -- kill it
+    io.socket_kill(self:cdata())
+    return true
+end
+
 -- close socket
 function _instance:close()
 
@@ -676,7 +690,7 @@ end
 
 -- tostring(socket)
 function _instance:__tostring()
-    local rawfd = self:rawfd() or "closed"
+    local rawfd = self:cdata() and self:rawfd() or "closed"
     local types = {"tcp", "udp", "icmp"}
     return string.format("<socket: %s%s/%s>", types[self:type()], self:family() == socket.IPV6 and "6" or "4", rawfd)
 end

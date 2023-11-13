@@ -78,6 +78,10 @@ function policy.policies()
             ["build.c++.gcc.modules.cxx11abi"]    = {description = "Force to enable new cxx11 abi in C++ modules for gcc.", type = "boolean"},
             -- Enable cuda device link
             ["build.cuda.devlink"]                = {description = "Enable Cuda devlink.", type = "boolean"},
+            -- Enable windows UAC and set level, e.g. invoker, admin, highest
+            ["windows.manifest.uac"]              = {description = "Enable windows manifest UAC.", type = "string"},
+            -- Enable ui access for windows UAC
+            ["windows.manifest.uac.ui"]           = {description = "Enable windows manifest UAC.", type = "boolean"},
             -- Automatically build before running
             ["run.autobuild"]                     = {description = "Automatically build before running.", type = "boolean"},
             -- Preprocessor configuration for ccache/distcc, we can disable linemarkers to speed up preprocess
@@ -112,9 +116,15 @@ function policy.policies()
             ["package.librarydeps.strict_compatibility"] = {description = "Set strict compatibility for package and it's all library dependencies.", type = "boolean"},
             -- Automatically passes dependency configuration for inner xmake package
             -- https://github.com/xmake-io/xmake/issues/3952
-            ["package.xmake.pass_depconfs"] = {description = "Automatically passes dependency configuration for inner xmake package", default = true, type = "boolean"},
-            -- will force cmake package use ninja for build
-            ["package.cmake_generator.ninja"] = {description = "Set cmake package use ninja for build", default = false, type = "boolean"}
+            ["package.xmake.pass_depconfs"]       = {description = "Automatically passes dependency configuration for inner xmake package", default = true, type = "boolean"},
+            -- It will force cmake package use ninja for build
+            ["package.cmake_generator.ninja"]     = {description = "Set cmake package use ninja for build", default = false, type = "boolean"},
+            -- Stop to test on the first failure
+            ["test.stop_on_first_failure"]        = {description = "Stop to test on the first failure", default = false, type = "boolean"},
+            -- Return zero as exit code on failure
+            ["test.return_zero_on_failure"]       = {description = "Return zero as the exit code on failure", default = false, type = "boolean"},
+            -- Show diagnosis info for checking build dependencies
+            ["diagnosis.check_build_deps"]        = {description = "Show diagnosis info for checking build dependencies", default = false, type = "boolean"}
         }
         policy._POLICIES = policies
     end

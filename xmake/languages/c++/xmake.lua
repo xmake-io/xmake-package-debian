@@ -20,7 +20,7 @@
 
 language("c++")
     add_rules("c++")
-    set_sourcekinds {cc = ".c", cxx = {".cpp", ".cc", ".cxx", ".mpp", ".mxx", ".cppm", ".ixx"}}
+    set_sourcekinds {cc = ".c", cxx = {".cpp", ".cc", ".cxx", ".mpp", ".mxx", ".cppm", ".ixx", ".c++"}}
     set_sourceflags {cc = {"cflags", "cxflags"}, cxx = {"cxxflags", "cxflags"}}
     set_targetkinds {binary = "ld", static = "ar", shared = "sh"}
     set_targetflags {binary = "ldflags", static = "arflags", shared = "shflags"}
@@ -74,6 +74,7 @@ language("c++")
         ,   "toolchain.rpathdirs"
         ,   "toolchain.frameworkdirs"
         ,   "config.links"
+        ,   "target.linkgroups" -- we must move it before target.links, because we need sort correct order for package and its deps
         ,   "target.links"
         ,   "toolchain.links"
         ,   "config.frameworks"
@@ -98,6 +99,7 @@ language("c++")
         ,   "toolchain.frameworkdirs"
         ,   "config.links"
         ,   "target.links"
+        ,   "target.linkgroups"
         ,   "toolchain.links"
         ,   "config.frameworks"
         ,   "target.frameworks"

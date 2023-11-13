@@ -127,9 +127,15 @@ end
 -- @see https://github.com/xmake-io/xmake/issues/4135
 function _get_frameworks_from_target(target)
     local values = table.wrap(target:get("frameworks"))
-    table.join2(values, target:get_from_opts("frameworks"))
-    table.join2(values, target:get_from_pkgs("frameworks"))
-    table.join2(values, target:get_from_deps("__qt_frameworks", {interface = true}))
+    for _, value in ipairs((target:get_from("frameworks", "option::*"))) do
+        table.join2(values, value)
+    end
+    for _, value in ipairs((target:get_from("frameworks", "package::*"))) do
+        table.join2(values, value)
+    end
+    for _, value in ipairs((target:get_from("__qt_frameworks", "dep::*", {interface = true}))) do
+        table.join2(values, value)
+    end
     return table.unique(values)
 end
 
@@ -368,6 +374,8 @@ function main(target, opt)
         _add_includedirs(target, path.join(qt.mkspecsdir, "win32-msvc"))
         target:add("linkdirs", qt.libdir)
         target:add("syslinks", "ws2_32", "gdi32", "ole32", "advapi32", "shell32", "user32", "opengl32", "imm32", "winmm", "iphlpapi")
+        -- for debugger, https://github.com/xmake-io/xmake-vscode/issues/225
+        target:add("runenvs", "PATH", qt.bindir)
     elseif target:is_plat("mingw") then
         target:set("frameworks", nil)
         -- we need to fix it, because gcc maybe does not work on latest mingw when `-isystem D:\a\_temp\msys64\mingw64\include` is passed.
@@ -449,6 +457,12 @@ function main(target, opt)
         elseif target:is_plat("mingw") then
             target:add("ldflags", "-mwindows", {force = true})
         end
+    end
+
+    -- set default runtime
+    -- @see https://github.com/xmake-io/xmake/issues/4161
+    if not target:get("runtimes") then
+        target:set("runtimes", is_mode("debug") and "MDd" or "MD")
     end
 end
 

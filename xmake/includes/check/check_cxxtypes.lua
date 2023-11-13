@@ -15,81 +15,81 @@
 -- Copyright (C) 2015-present, TBOOX Open Source Group.
 --
 -- @author      ruki
--- @file        check_ctypes.lua
+-- @file        check_cxxtypes.lua
 --
 
--- check c types and add macro definition
+-- check c++ types and add macro definition
 --
 -- e.g.
 --
--- check_ctypes("HAS_WCHAR", "wchar_t")
--- check_ctypes("HAS_WCHAR_AND_FLOAT", {"wchar_t", "float"})
+-- check_cxxtypes("HAS_WCHAR", "wchar_t")
+-- check_cxxtypes("HAS_WCHAR_AND_FLOAT", {"wchar_t", "float"})
 --
-function check_ctypes(definition, types, opt)
+function check_cxxtypes(definition, types, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_ctypes(types)
+        add_cxxtypes(types)
         add_defines(definition)
         if opt.languages then
             set_languages(opt.languages)
         end
-        if opt.cflags then
-            add_cflags(opt.cflags)
-        end
         if opt.cxflags then
             add_cxflags(opt.cxflags)
+        end
+        if opt.cxxflags then
+            add_cxxflags(opt.cxxflags)
         end
         if opt.defines then
             add_defines(opt.defines)
         end
         if opt.includes then
-            add_cincludes(opt.includes)
+            add_cxxincludes(opt.includes)
         end
     option_end()
-    restore_scope()
+    interp_restore_scope()
     add_options(optname)
 end
 
--- check c types and add macro definition to the configuration types
+-- check c++ types and add macro definition to the configuration types
 --
 -- e.g.
 --
--- configvar_check_ctypes("HAS_WCHAR", "wchar_t")
--- configvar_check_ctypes("HAS_WCHAR", "wchar_t", {default = 0})
--- configvar_check_ctypes("CUSTOM_WCHAR=wchar_t", "wchar_t", {default = "", quote = false})
--- configvar_check_ctypes("HAS_WCHAR_AND_FLOAT", {"wchar_t", "float"})
+-- configvar_check_cxxtypes("HAS_WCHAR", "wchar_t")
+-- configvar_check_cxxtypes("HAS_WCHAR", "wchar_t", {default = 0})
+-- configvar_check_cxxtypes("CUSTOM_WCHAR=wchar_t", "wchar_t", {default = "", quote = false})
+-- configvar_check_cxxtypes("HAS_WCHAR_AND_FLOAT", {"wchar_t", "float"})
 --
-function configvar_check_ctypes(definition, types, opt)
+function configvar_check_cxxtypes(definition, types, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
     local defname, defval = table.unpack(definition:split('='))
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_ctypes(types)
+        add_cxxtypes(types)
         if opt.default == nil then
             set_configvar(defname, defval or 1, {quote = opt.quote})
         end
         if opt.languages then
             set_languages(opt.languages)
         end
-        if opt.cflags then
-            add_cflags(opt.cflags)
-        end
         if opt.cxflags then
             add_cxflags(opt.cxflags)
+        end
+        if opt.cxxflags then
+            add_cxxflags(opt.cxxflags)
         end
         if opt.defines then
             add_defines(opt.defines)
         end
         if opt.includes then
-            add_cincludes(opt.includes)
+            add_cxxincludes(opt.includes)
         end
     option_end()
-    restore_scope()
+    interp_restore_scope()
     if opt.default == nil then
         add_options(optname)
     else
