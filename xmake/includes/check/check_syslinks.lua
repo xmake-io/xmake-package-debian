@@ -15,62 +15,50 @@
 -- Copyright (C) 2015-present, TBOOX Open Source Group.
 --
 -- @author      ruki
--- @file        check_cflags.lua
+-- @file        check_syslinks.lua
 --
 
--- check c flags and add macro definition
+-- check links and add macro definition
 --
 -- e.g.
 --
--- check_cflags("HAS_SSE2", "-msse2")
--- check_cflags("HAS_SSE2", {"-msse", "-msse2"})
+-- check_syslinks("HAS_PTHREAD", "pthread")
+-- check_syslinks("HAS_PTHREAD", {"pthread", "m", "dl"})
 --
-function check_cflags(definition, flags, opt)
+function check_syslinks(definition, links, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
+        add_syslinks(links)
         add_defines(definition)
-        on_check(function (option)
-            import("core.tool.compiler")
-            if compiler.has_flags("c", flags, opt) then
-                option:enable(true)
-            end
-        end)
     option_end()
-    restore_scope()
+    interp_restore_scope()
     add_options(optname)
 end
 
--- check c flags and add macro definition to the configuration flags
+-- check links and add macro definition to the configuration files
 --
 -- e.g.
 --
--- configvar_check_cflags("HAS_SSE2", "-msse2")
--- configvar_check_cflags("HAS_SSE2", {"-msse", "-msse2"})
--- configvar_check_cflags("HAS_SSE2", "-msse2", {default = 0})
--- configvar_check_cflags("SSE_STR=2", "-msse2")
--- configvar_check_cflags("SSE=2", "-msse2", {quote = false})
+-- configvar_check_syslinks("HAS_PTHREAD", "pthread")
+-- configvar_check_syslinks("HAS_PTHREAD", "pthread", {default = 0})
+-- configvar_check_syslinks("HAS_PTHREAD", {"pthread", "m", "dl"})
 --
-function configvar_check_cflags(definition, flags, opt)
+function configvar_check_syslinks(definition, links, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
     local defname, defval = table.unpack(definition:split('='))
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
+        add_syslinks(links)
         if opt.default == nil then
             set_configvar(defname, defval or 1, {quote = opt.quote})
         end
-        on_check(function (option)
-            import("core.tool.compiler")
-            if compiler.has_flags("c", flags, opt) then
-                option:enable(true)
-            end
-        end)
     option_end()
-    restore_scope()
+    interp_restore_scope()
     if opt.default == nil then
         add_options(optname)
     else

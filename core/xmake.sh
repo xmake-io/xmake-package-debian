@@ -1,7 +1,7 @@
 #!/bin/sh
 
 set_project "xmake"
-set_version "2.8.3" "%Y%m%d"
+set_version "2.8.5" "%Y%m%d"
 
 # set warning all
 set_warnings "all"
@@ -196,6 +196,10 @@ option_find_tbox() {
         fi
         add_cflags "${cflags}"
         add_ldflags "${ldflags}"
+        # ubuntu armv7/armel maybe need it
+        if is_plat "linux" && is_arch "armv7" "arm"; then
+            add_ldflags "-latomic"
+        fi
     option_end
 }
 

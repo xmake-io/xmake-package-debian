@@ -2,6 +2,26 @@
 
 ## master (unreleased)
 
+## v2.8.5
+
+### New features
+
+* [#1452](https://github.com/xmake-io/xmake/issues/1452): Improve link mechanism and order
+* [#1438](https://github.com/xmake-io/xmake/issues/1438): Support code amalgamation
+* [#3381](https://github.com/xmake-io/xmake/issues/3381): Add `xmake test` support
+* [#4276](https://github.com/xmake-io/xmake/issues/4276): Support custom scope api
+* [#4286](https://github.com/xmake-io/xmake/pull/4286): Add Apple XROS support
+* [#4345](https://github.com/xmake-io/xmake/issues/4345): Support check sizeof
+* [#4369](https://github.com/xmake-io/xmake/pull/4369): Add windows.manifest.uac policy
+
+### Changes
+
+* [#4284](https://github.com/xmake-io/xmake/issues/4284): Improve builtin includes
+
+### Bugs fixed
+
+* [#4256](https://github.com/xmake-io/xmake/issues/4256): Fix intellisense for vsxmake/c++modules
+
 ## v2.8.3
 
 ### New features
@@ -1661,6 +1681,26 @@
 # 更新日志
 
 ## master (开发中)
+
+## v2.8.5
+
+### 新特性
+
+* [#1452](https://github.com/xmake-io/xmake/issues/1452): 支持链接顺序调整，链接组
+* [#1438](https://github.com/xmake-io/xmake/issues/1438): 支持代码 amalgamation
+* [#3381](https://github.com/xmake-io/xmake/issues/3381): 添加 `xmake test` 支持
+* [#4276](https://github.com/xmake-io/xmake/issues/4276): 支持自定义域 API
+* [#4286](https://github.com/xmake-io/xmake/pull/4286): 添加 Apple XROS 支持
+* [#4345](https://github.com/xmake-io/xmake/issues/4345): 支持检测类型大小 sizeof
+* [#4369](https://github.com/xmake-io/xmake/pull/4369): 添加 windows.manifest.uac 策略
+
+### 改进
+
+* [#4284](https://github.com/xmake-io/xmake/issues/4284): 改进内置 includes 模块
+
+### Bugs 修复
+
+* [#4256](https://github.com/xmake-io/xmake/issues/4256): 为 vsxmake 生成器修复 c++ modules intellisense
 
 ## v2.8.3
 

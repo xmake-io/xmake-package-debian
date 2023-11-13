@@ -688,10 +688,13 @@ function interpreter.new()
     instance:api_register(nil, "add_subdirs",  interpreter.api_builtin_add_subdirs)
     instance:api_register(nil, "add_subfiles", interpreter.api_builtin_add_subfiles)
     instance:api_register(nil, "set_xmakever", interpreter.api_builtin_set_xmakever)
-    instance:api_register(nil, "save_scope",   interpreter.api_builtin_save_scope)
-    instance:api_register(nil, "restore_scope",interpreter.api_builtin_restore_scope)
-    instance:api_register(nil, "get_scopekind",interpreter.api_builtin_get_scopekind)
-    instance:api_register(nil, "get_scopename",interpreter.api_builtin_get_scopename)
+
+    -- register the interpreter interfaces
+    instance:api_register(nil, "interp_save_scope",    interpreter.api_interp_save_scope)
+    instance:api_register(nil, "interp_restore_scope", interpreter.api_interp_restore_scope)
+    instance:api_register(nil, "interp_get_scopekind", interpreter.api_interp_get_scopekind)
+    instance:api_register(nil, "interp_get_scopename", interpreter.api_interp_get_scopename)
+    instance:api_register(nil, "interp_add_scopeapis", interpreter.api_interp_add_scopeapis)
 
     -- register the builtin modules
     for module_name, module in pairs(interpreter._builtin_modules()) do
@@ -1214,6 +1217,77 @@ function interpreter:api_register_set_keyvalues(scope_kind, ...)
     self:_api_register_xxx_values(scope_kind, "set", implementation, ...)
 end
 
+-- register api for set_groups
+function interpreter:api_register_set_groups(scope_kind, ...)
+
+    -- define implementation
+    local implementation = function (self, scope, name, ...)
+
+        -- get extra config
+        local values = {...}
+        local extra_config = values[#values]
+        if table.is_dictionary(extra_config) then
+            table.remove(values)
+        else
+            extra_config = nil
+        end
+
+        -- expand values
+        values = table.join(table.unpack(values))
+        table.wrap_lock(values)
+
+        -- save values
+        scope[name] = values
+
+        -- save extra config
+        if extra_config then
+            scope["__extra_" .. name] = scope["__extra_" .. name] or {}
+            local extrascope = scope["__extra_" .. name]
+            local key = table.concat(values, "_")
+            extrascope[key] = extra_config
+        end
+    end
+
+    -- register implementation
+    self:_api_register_xxx_values(scope_kind, "set", implementation, ...)
+end
+
+-- register api for add_groups
+function interpreter:api_register_add_groups(scope_kind, ...)
+
+    -- define implementation
+    local implementation = function (self, scope, name, ...)
+
+        -- get extra config
+        local values = {...}
+        local extra_config = values[#values]
+        if table.is_dictionary(extra_config) then
+            table.remove(values)
+        else
+            extra_config = nil
+        end
+
+        -- expand values
+        values = table.join(table.unpack(values))
+
+        -- save values
+        scope[name] = scope[name] or {}
+        table.wrap_lock(values)
+        table.insert(scope[name], values)
+
+        -- save extra config
+        if extra_config then
+            scope["__extra_" .. name] = scope["__extra_" .. name] or {}
+            local extrascope = scope["__extra_" .. name]
+            local key = table.concat(values, "_")
+            extrascope[key] = extra_config
+        end
+    end
+
+    -- register implementation
+    self:_api_register_xxx_values(scope_kind, "add", implementation, ...)
+end
+
 -- register api for add_keyvalues
 --
 -- interp:api_register_add_keyvalues("scope_kind", "name1", "name2", ...)
@@ -1612,18 +1686,47 @@ function interpreter:api_builtin_includes(...)
     local subpaths = table.join(...)
     local subpaths_matched = {}
     for _, subpath in ipairs(subpaths) do
-        -- find the given files from the project directory
         local found = false
-        local files = os.match(subpath, not subpath:endswith(".lua"))
-        if files and #files > 0 then
-            table.join2(subpaths_matched, files)
-            found = true
-        elseif not path.is_absolute(subpath) then
-            -- attempt to find files from programdir/includes/*.lua
-            files = os.files(path.join(os.programdir(), "includes", subpath))
+        -- attempt to find files from programdir/includes/*.lua
+        -- e.g. includes("@builtin/check")
+        if subpath:startswith("@builtin/") then
+            local builtin_path = subpath:sub(10)
+            local files
+            if builtin_path:endswith(".lua") then
+                files = os.files(path.join(os.programdir(), "includes", builtin_path))
+            else
+                files = os.files(path.join(os.programdir(), "includes", builtin_path, "xmake.lua"))
+            end
             if files and #files > 0 then
                 table.join2(subpaths_matched, files)
                 found = true
+            end
+        end
+        -- find the given files from the project directory
+        if not found then
+            local files = os.match(subpath, not subpath:endswith(".lua"))
+            if files and #files > 0 then
+                table.join2(subpaths_matched, files)
+                found = true
+            end
+        end
+        -- attempt to find files from programdir/includes/*.lua (deprecated)
+        if not found and not path.is_absolute(subpath) then
+            -- e.g. includes("check_cflags.lua")
+            if subpath:startswith("check_") then
+                local files = os.files(path.join(os.programdir(), "includes", "check", subpath))
+                if files and #files > 0 then
+                    table.join2(subpaths_matched, files)
+                    found = true
+                    utils.warning("deprecated: please use includes(\"@builtin/check\") instead of includes(\"%s\")", subpath)
+                end
+            elseif subpath:startswith("qt_") then
+                local files = os.files(path.join(os.programdir(), "includes", "qt", subpath))
+                if files and #files > 0 then
+                    table.join2(subpaths_matched, files)
+                    found = true
+                    utils.warning("deprecated: please use includes(\"@builtin/qt\") instead of includes(\"%s\")", subpath)
+                end
             end
         end
         if not found then
@@ -1727,9 +1830,9 @@ function interpreter:api_builtin_add_subfiles(...)
     deprecated.add("includes(%s)", "add_subfiles(%s)", table.concat(files, ", "), table.concat(files, ", "))
 end
 
--- the builtin api: save_scope()
+-- the interpreter api: interp_save_scope()
 -- save the current scope
-function interpreter:api_builtin_save_scope()
+function interpreter:api_interp_save_scope()
     assert(self and self._PRIVATE)
 
     -- the scopes
@@ -1744,9 +1847,9 @@ function interpreter:api_builtin_save_scope()
     table.insert(self._PRIVATE._SCOPES_SAVED, scope)
 end
 
--- the builtin api: restore_scope()
+-- the interpreter api: interp_restore_scope()
 -- restore the current scope
-function interpreter:api_builtin_restore_scope()
+function interpreter:api_interp_restore_scope()
     assert(self and self._PRIVATE)
 
     -- the scopes
@@ -1765,14 +1868,14 @@ function interpreter:api_builtin_restore_scope()
     end
 end
 
--- the builtin api: get_scopekind()
-function interpreter:api_builtin_get_scopekind()
+-- the interpreter api: interp_get_scopekind()
+function interpreter:api_interp_get_scopekind()
     local scopes = self._PRIVATE._SCOPES
     return scopes._CURRENT_KIND
 end
 
--- the builtin api: get_scopename()
-function interpreter:api_builtin_get_scopename()
+-- the interpreter api: interp_get_scopename()
+function interpreter:api_interp_get_scopename()
     local scopes = self._PRIVATE._SCOPES
     local scope_kind = scopes._CURRENT_KIND
     if scope_kind and scopes[scope_kind] then
@@ -1783,6 +1886,22 @@ function interpreter:api_builtin_get_scopename()
             end
         end
     end
+end
+
+-- the interpreter api: interp_add_scopeapis()
+function interpreter:api_interp_add_scopeapis(...)
+    local apis = {...}
+    local extra_config = apis[#apis]
+    if table.is_dictionary(extra_config) then
+        table.remove(apis)
+    else
+        extra_config = nil
+    end
+    local kind = "values"
+    if extra_config and extra_config.kind then
+        kind = extra_config.kind
+    end
+    return self:api_define({[kind] = apis})
 end
 
 -- get api function

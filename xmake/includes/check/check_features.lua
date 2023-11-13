@@ -15,36 +15,24 @@
 -- Copyright (C) 2015-present, TBOOX Open Source Group.
 --
 -- @author      ruki
--- @file        check_cfuncs.lua
+-- @file        check_features.lua
 --
 
--- check c funcs and add macro definition
---
--- the function syntax
---  - sigsetjmp
---  - sigsetjmp((void*)0, 0)
---  - sigsetjmp{sigsetjmp((void*)0, 0);}
---  - sigsetjmp{int a = 0; sigsetjmp((void*)a, a);}
+-- check features and add macro definition
 --
 -- e.g.
 --
--- check_cfuncs("HAS_SETJMP", "setjmp", {includes = {"signal.h", "setjmp.h"}, links = {}})
--- check_cfuncs("HAS_SETJMP", {"setjmp", "sigsetjmp{sigsetjmp((void*)0, 0);}"})
+-- check_features("HAS_CONSTEXPR", "cxx_constexpr")
+-- check_features("HAS_CONSEXPR_AND_STATIC_ASSERT", {"cxx_constexpr", "c_static_assert"}, {cxflags = "", languages = "c++11"})
 --
-function check_cfuncs(definition, funcs, opt)
+function check_features(definition, features, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_cfuncs(funcs)
+        add_features(features)
         add_defines(definition)
-        if opt.links then
-            add_links(opt.links)
-        end
-        if opt.includes then
-            add_cincludes(opt.includes)
-        end
         if opt.languages then
             set_languages(opt.languages)
         end
@@ -54,42 +42,32 @@ function check_cfuncs(definition, funcs, opt)
         if opt.cxflags then
             add_cxflags(opt.cxflags)
         end
-        if opt.defines then
-            add_defines(opt.defines)
-        end
-        if opt.warnings then
-            set_warnings(opt.warnings)
+        if opt.cxxflags then
+            add_cxxflags(opt.cxxflags)
         end
     option_end()
-    restore_scope()
+    interp_restore_scope()
     add_options(optname)
 end
 
--- check c funcs and add macro definition to the configuration files
+-- check features and add macro definition to the configuration files
 --
 -- e.g.
 --
--- configvar_check_cfuncs("HAS_SETJMP", "setjmp", {includes = {"signal.h", "setjmp.h"}, links = {}})
--- configvar_check_cfuncs("HAS_SETJMP", {"setjmp", "sigsetjmp{sigsetjmp((void*)0, 0);}"})
--- configvar_check_cfuncs("HAS_SETJMP", "setjmp", {includes = {"setjmp.h"}, default = 0})
--- configvar_check_cfuncs("CUSTOM_SETJMP=setjmp", "setjmp", {includes = {"setjmp.h"}, default = "", quote = false})
+-- configvar_check_features("HAS_CONSTEXPR", "cxx_constexpr")
+-- configvar_check_features("HAS_CONSTEXPR", "cxx_constexpr", {default = 0})
+-- configvar_check_features("HAS_CONSEXPR_AND_STATIC_ASSERT", {"cxx_constexpr", "c_static_assert"}, {languages = "c++11"})
 --
-function configvar_check_cfuncs(definition, funcs, opt)
+function configvar_check_features(definition, features, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
     local defname, defval = table.unpack(definition:split('='))
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_cfuncs(funcs)
+        add_features(features)
         if opt.default == nil then
             set_configvar(defname, defval or 1, {quote = opt.quote})
-        end
-        if opt.links then
-            add_links(opt.links)
-        end
-        if opt.includes then
-            add_cincludes(opt.includes)
         end
         if opt.languages then
             set_languages(opt.languages)
@@ -100,14 +78,11 @@ function configvar_check_cfuncs(definition, funcs, opt)
         if opt.cxflags then
             add_cxflags(opt.cxflags)
         end
-        if opt.defines then
-            add_defines(opt.defines)
-        end
-        if opt.warnings then
-            set_warnings(opt.warnings)
+        if opt.cxxflags then
+            add_cxxflags(opt.cxxflags)
         end
     option_end()
-    restore_scope()
+    interp_restore_scope()
     if opt.default == nil then
         add_options(optname)
     else

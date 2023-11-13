@@ -15,50 +15,56 @@
 -- Copyright (C) 2015-present, TBOOX Open Source Group.
 --
 -- @author      ruki
--- @file        check_cxxincludes.lua
+-- @file        check_cincludes.lua
 --
 
--- check include c++ files and add macro definition
+-- check include c files and add macro definition
 --
 -- e.g.
 --
--- check_cxxincludes("HAS_STRING_H", "string.h")
--- check_cxxincludes("HAS_STRING_AND_STDIO_H", {"string.h", "stdio.h"})
+-- check_cincludes("HAS_STRING_H", "string.h")
+-- check_cincludes("HAS_STRING_AND_STDIO_H", {"string.h", "stdio.h"})
 --
-function check_cxxincludes(definition, includes, opt)
+function check_cincludes(definition, includes, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_cxxincludes(includes)
+        add_cincludes(includes)
+        if opt.includedirs then
+            add_includedirs(opt.includedirs)
+        end
         add_defines(definition)
     option_end()
-    restore_scope()
+    interp_restore_scope()
     add_options(optname)
 end
 
--- check include c++ files and add macro definition to the configuration files
+-- check include c files and add macro definition to the configuration files
 --
 -- e.g.
 --
--- configvar_check_cxxincludes("HAS_STRING_H", "string.h")
--- configvar_check_cxxincludes("HAS_STRING_H", "string.h", {default = 0})
--- configvar_check_cxxincludes("HAS_STRING_AND_STDIO_H", {"string.h", "stdio.h"})
+-- configvar_check_cincludes("HAS_STRING_H", "string.h")
+-- configvar_check_cincludes("HAS_STRING_H", "string.h", {default = 0})
+-- configvar_check_cincludes("HAS_STRING_AND_STDIO_H", {"string.h", "stdio.h"})
 --
-function configvar_check_cxxincludes(definition, includes, opt)
+function configvar_check_cincludes(definition, includes, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
     local defname, defval = table.unpack(definition:split('='))
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_cxxincludes(includes)
+        add_cincludes(includes)
+        if opt.includedirs then
+            add_includedirs(opt.includedirs)
+        end
         if opt.default == nil then
             set_configvar(defname, defval or 1, {quote = opt.quote})
         end
     option_end()
-    restore_scope()
+    interp_restore_scope()
     if opt.default == nil then
         add_options(optname)
     else

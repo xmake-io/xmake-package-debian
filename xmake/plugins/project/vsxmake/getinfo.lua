@@ -31,6 +31,7 @@ import("core.tool.toolchain")
 import("core.cache.memcache")
 import("core.cache.localcache")
 import("lib.detect.find_tool")
+import("private.utils.target", {alias = "target_utils"})
 import("private.action.run.runenvs")
 import("private.action.require.install", {alias = "install_requires"})
 import("actions.config.configfiles", {alias = "generate_configfiles", rootdir = os.programdir()})
@@ -89,11 +90,17 @@ end
 
 -- get values from target
 function _get_values_from_target(target, name)
-    local values = table.wrap(target:get(name))
-    table.join2(values, target:get_from_opts(name))
-    table.join2(values, target:get_from_pkgs(name))
-    table.join2(values, target:get_from_deps(name, {interface = true}))
+    local values = {}
+    for _, value in ipairs((target:get_from(name, "*"))) do
+        table.join2(values, value)
+    end
     return table.unique(values)
+end
+
+-- get flags from target
+function _get_flags_from_target(target, name)
+    local flags = _get_values_from_target(target, name)
+    return target_utils.translate_flags_in_tool(target, name, flags)
 end
 
 -- make target info
@@ -137,9 +144,9 @@ function _make_targetinfo(mode, arch, target)
     targetinfo.defines       = _make_arrs(_get_values_from_target(target, "defines"))
 
     -- save flags
-    targetinfo.cflags        = _make_arrs(_get_values_from_target(target, "cflags"), " ")
-    targetinfo.cxflags       = _make_arrs(_get_values_from_target(target, "cxflags"), " ")
-    targetinfo.cxxflags      = _make_arrs(_get_values_from_target(target, "cxxflags"), " ")
+    targetinfo.cflags        = _make_arrs(_get_flags_from_target(target, "cflags"), " ")
+    targetinfo.cxflags       = _make_arrs(_get_flags_from_target(target, "cxflags"), " ")
+    targetinfo.cxxflags      = _make_arrs(_get_flags_from_target(target, "cxxflags"), " ")
 
     -- save languages
     targetinfo.languages     = _make_arrs(_get_values_from_target(target, "languages"))

@@ -15,56 +15,62 @@
 -- Copyright (C) 2015-present, TBOOX Open Source Group.
 --
 -- @author      ruki
--- @file        check_cincludes.lua
+-- @file        check_cxxflags.lua
 --
 
--- check include c files and add macro definition
+-- check c++ flags and add macro definition
 --
 -- e.g.
 --
--- check_cincludes("HAS_STRING_H", "string.h")
--- check_cincludes("HAS_STRING_AND_STDIO_H", {"string.h", "stdio.h"})
+-- check_cxxflags("HAS_SSE2", "-msse2")
+-- check_cxxflags("HAS_SSE2", {"-msse", "-msse2"})
 --
-function check_cincludes(definition, includes, opt)
+function check_cxxflags(definition, flags, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_cincludes(includes)
-        if opt.includedirs then
-            add_includedirs(opt.includedirs)
-        end
         add_defines(definition)
+        on_check(function (option)
+            import("core.tool.compiler")
+            if compiler.has_flags("cxx", flags, opt) then
+                option:enable(true)
+            end
+        end)
     option_end()
-    restore_scope()
+    interp_restore_scope()
     add_options(optname)
 end
 
--- check include c files and add macro definition to the configuration files
+-- check c++ flags and add macro definition to the configuration flags
 --
 -- e.g.
 --
--- configvar_check_cincludes("HAS_STRING_H", "string.h")
--- configvar_check_cincludes("HAS_STRING_H", "string.h", {default = 0})
--- configvar_check_cincludes("HAS_STRING_AND_STDIO_H", {"string.h", "stdio.h"})
+-- configvar_check_cxxflags("HAS_SSE2", "-msse2")
+-- configvar_check_cxxflags("HAS_SSE2", {"-msse", "-msse2"})
+-- configvar_check_cxxflags("HAS_SSE2", "-msse2", {default = 0})
+-- configvar_check_cxxflags("SSE_STR=2", "-msse2")
+-- configvar_check_cxxflags("SSE=2", "-msse2", {quote = false})
 --
-function configvar_check_cincludes(definition, includes, opt)
+function configvar_check_cxxflags(definition, flags, opt)
     opt = opt or {}
     local optname = opt.name or ("__" .. definition)
     local defname, defval = table.unpack(definition:split('='))
-    save_scope()
+    interp_save_scope()
     option(optname)
         set_showmenu(false)
-        add_cincludes(includes)
-        if opt.includedirs then
-            add_includedirs(opt.includedirs)
-        end
         if opt.default == nil then
             set_configvar(defname, defval or 1, {quote = opt.quote})
         end
+        on_check(function (option)
+            import("core.tool.compiler")
+            if compiler.has_flags("cxx", flags, opt) then
+                option:enable(true)
+            end
+        end)
     option_end()
-    restore_scope()
+    interp_restore_scope()
     if opt.default == nil then
         add_options(optname)
     else

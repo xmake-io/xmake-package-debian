@@ -29,6 +29,7 @@ import("core.project.rule")
 import("lib.detect.find_tool")
 import("private.utils.batchcmds")
 import("private.utils.rule_groups")
+import("private.utils.target", {alias = "target_utils"})
 import("plugins.project.utils.target_cmds", {rootdir = os.programdir()})
 
 -- get minimal cmake version
@@ -123,10 +124,9 @@ function _get_configs_from_target(target, name)
     if name:find("flags", 1, true) then
         table.join2(values, target:toolconfig(name))
     end
-    table.join2(values, target:get(name))
-    table.join2(values, target:get_from_opts(name))
-    table.join2(values, target:get_from_pkgs(name))
-    table.join2(values, target:get_from_deps(name, {interface = true}))
+    for _, value in ipairs((target:get_from(name, "*"))) do
+        table.join2(values, value)
+    end
     if not name:find("flags", 1, true) then -- for includedirs, links ..
         table.join2(values, target:toolconfig(name))
     end
@@ -158,7 +158,7 @@ function _translate_flag(flag, outputdir)
             flag = "-fmodule-mapper=" .. _get_relative_unix_path_to_cmake(flag:sub(17), outputdir)
         elseif flag:match("(.+)=(.+)") then
             local k, v = flag:match("(.+)=(.+)")
-            if v and v:endswith(".ifc") then -- e.g. hello=xxx/hello.ifc
+            if v and (v:endswith(".ifc") or v:endswith(".map")) then -- e.g. hello=xxx/hello.ifc
                 flag = k .. "=" .. _get_relative_unix_path_to_cmake(v, outputdir)
             end
         end
@@ -201,49 +201,7 @@ end
 -- @see https://github.com/xmake-io/xmake/issues/3594
 function _get_flags_from_target(target, flagkind)
     local flags = _get_configs_from_target(target, flagkind)
-    local extraconf = target:extraconf(flagkind)
-    local sourcekind
-    if flagkind == "cflags" then
-        sourcekind = "cc"
-    elseif flagkind == "cxxflags" or flagkind == "cxflags" then
-        sourcekind = "cxx"
-    elseif flagkind == "asflags" then
-        sourcekind = "as"
-    elseif flagkind == "cuflags" then
-        sourcekind = "cu"
-    else
-        raise("unknown flag kind %s", flagkind)
-    end
-    local toolinst = target:compiler(sourcekind)
-
-    -- does this flag belong to this tool?
-    -- @see https://github.com/xmake-io/xmake/issues/3022
-    --
-    -- e.g.
-    -- for all: add_cxxflags("-g")
-    -- only for clang: add_cxxflags("clang::-stdlib=libc++")
-    -- only for clang and multiple flags: add_cxxflags("-stdlib=libc++", "-DFOO", {tools = "clang"})
-    --
-    local result = {}
-    for _, flag in ipairs(flags) do
-        local for_this_tool = true
-        local flagconf = extraconf and extraconf[flag]
-        if type(flag) == "string" and flag:find("::", 1, true) then
-            for_this_tool = false
-            local splitinfo = flag:split("::", {plain = true})
-            local toolname = splitinfo[1]
-            if toolname == toolinst:name() then
-                flag = splitinfo[2]
-                for_this_tool = true
-            end
-        elseif flagconf and flagconf.tools then
-            for_this_tool = table.contains(table.wrap(flagconf.tools), toolinst:name())
-        end
-        if for_this_tool then
-            table.insert(result, flag)
-        end
-    end
-    return result
+    return target_utils.translate_flags_in_tool(target, flagkind, flags)
 end
 
 -- add project info
@@ -381,7 +339,8 @@ end
 function _add_target_sources(cmakelists, target, outputdir)
     local has_cuda = false
     cmakelists:print("target_sources(%s PRIVATE", target:name())
-    for _, sourcebatch in table.orderpairs(target:sourcebatches()) do
+    local sourcebatches = target:sourcebatches()
+    for _, sourcebatch in table.orderpairs(sourcebatches) do
         if _sourcebatch_is_built(sourcebatch) then
             for _, sourcefile in ipairs(sourcebatch.sourcefiles) do
                 cmakelists:print("    " .. _get_relative_unix_path(sourcefile, outputdir))
@@ -490,8 +449,7 @@ end
 function _add_target_sysinclude_directories(cmakelists, target, outputdir)
     local includedirs = _get_configs_from_target(target, "sysincludedirs")
     if #includedirs > 0 then
-        -- TODO should be `SYSTEM PRIVATE`
-        cmakelists:print("target_include_directories(%s PRIVATE", target:name())
+        cmakelists:print("target_include_directories(%s SYSTEM PRIVATE", target:name())
         for _, includedir in ipairs(includedirs) do
             cmakelists:print("    " .. _get_relative_unix_path(includedir, outputdir))
         end
@@ -499,7 +457,7 @@ function _add_target_sysinclude_directories(cmakelists, target, outputdir)
     end
     local includedirs_interface = target:get("sysincludedirs", {interface = true})
     if includedirs_interface then
-        cmakelists:print("target_include_directories(%s INTERFACE", target:name())
+        cmakelists:print("target_include_directories(%s SYSTEM INTERFACE", target:name())
         for _, headerdir in ipairs(includedirs_interface) do
             cmakelists:print("    " .. _get_relative_unix_path(headerdir, outputdir))
         end
@@ -612,7 +570,8 @@ function _add_target_compile_options(cmakelists, target, outputdir)
     end
 
     -- add cflags/cxxflags for the specific source files
-    for _, sourcebatch in table.orderpairs(target:sourcebatches()) do
+    local sourcebatches = target:sourcebatches()
+    for _, sourcebatch in table.orderpairs(sourcebatches) do
         if _sourcebatch_is_built(sourcebatch) then
             for _, sourcefile in ipairs(sourcebatch.sourcefiles) do
                 _add_target_sourcefiles_flags(cmakelists, target, sourcefile, "cxxflags", outputdir)
@@ -835,7 +794,8 @@ function _add_target_link_libraries(cmakelists, target, outputdir)
 
     -- add other object files, maybe from custom rules
     local objectfiles_set = hashset.new()
-    for _, sourcebatch in table.orderpairs(target:sourcebatches()) do
+    local sourcebatches = target:sourcebatches()
+    for _, sourcebatch in table.orderpairs(sourcebatches) do
         if _sourcebatch_is_built(sourcebatch) then
             for _, objectfile in ipairs(sourcebatch.objectfiles) do
                 objectfiles_set:insert(objectfile)
@@ -883,13 +843,13 @@ function _add_target_link_directories(cmakelists, target, outputdir)
 end
 
 -- add target link options
-function _add_target_link_options(cmakelists, target)
+function _add_target_link_options(cmakelists, target, outputdir)
     local ldflags = _get_configs_from_target(target, "ldflags")
     local shflags = _get_configs_from_target(target, "shflags")
     if #ldflags > 0 or #shflags > 0 then
         local flags = {}
         for _, flag in ipairs(table.unique(table.join(ldflags, shflags))) do
-            table.insert(flags, flag)
+            table.insert(flags, _translate_flag(flag, outputdir))
         end
         if #flags > 0 then
             local cmake_minver = _get_cmake_minver()
@@ -1084,7 +1044,7 @@ function _add_target(cmakelists, target, outputdir)
     _add_target_link_directories(cmakelists, target, outputdir)
 
     -- add target link options
-    _add_target_link_options(cmakelists, target)
+    _add_target_link_options(cmakelists, target, outputdir)
 
     -- add target sources
     _add_target_sources(cmakelists, target, outputdir)
