@@ -1,6 +1,8 @@
 xmake (2.8.5+ds-1) unstable; urgency=medium
 
   * New upstream release.
+  * d/patches: Refresh convert_local_source_to_external_dependencies.patch and
+    remove patches fixed in upstream.
 
  -- Lance Lin <lq27267@gmail.com>  Mon, 13 Nov 2023 21:45:37 +0700
 
