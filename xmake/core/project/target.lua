@@ -216,6 +216,9 @@ function _instance:_copiedfiles(filetype, outputdir, pathfilter)
 
                     -- get the prefix directory
                     local prefixdir = fileinfo.prefixdir
+                    if fileinfo.rootdir then
+                        rootdir = fileinfo.rootdir
+                    end
 
                     -- add the destinate copied files
                     for _, srcpath in ipairs(srcpaths) do
@@ -470,6 +473,30 @@ function _instance:_get_from_source(name, source, result_values, result_sources,
     end
 end
 
+-- get the checked target, it's only for target:check_xxx api.
+--
+-- we should not inherit links from deps/packages when checking snippets in on_config,
+-- because the target deps has been not built.
+--
+-- @see https://github.com/xmake-io/xmake/issues/4491
+--
+function _instance:_checked_target()
+    local checked_target = self._CHECKED_TARGET
+    if checked_target == nil then
+        checked_target = self:clone()
+        -- we need update target:cachekey(), because target flags may be cached in builder
+        checked_target:_invalidate()
+        checked_target.get_from = function (target, name, sources, opt)
+            if (name == "links" or name == "linkdirs") and sources == "*" then
+                sources = "self"
+            end
+            return _instance.get_from(target, name, sources, opt)
+        end
+        self._CHECKED_TARGET = checked_target
+    end
+    return checked_target
+end
+
 -- clone target, @note we can just call it in after_load()
 function _instance:clone()
     if not self:_is_loaded() then
@@ -539,7 +566,9 @@ function _instance:get(name, opt)
         if not table.is_dictionary(values) then
             local results = {}
             for _, value in ipairs(table.wrap(values)) do
-                local vs_conf = self:_visibility(extraconf[value])
+                -- we always call self:extraconf() to handle group value
+                local extra = self:extraconf(name, value)
+                local vs_conf = self:_visibility(extra)
                 if bit.band(vs_required, vs_conf) ~= 0 then
                     table.insert(results, value)
                 end
@@ -551,7 +580,7 @@ function _instance:get(name, opt)
             return values
         end
     else
-        -- only get thr private values
+        -- only get the private values
         if bit.band(vs_required, vs_private) ~= 0 then
             return values
         end
@@ -2601,7 +2630,7 @@ end
 --
 function _instance:has_features(features, opt)
     opt = opt or {}
-    opt.target = self
+    opt.target = self:_checked_target()
     return sandbox_module.import("core.tool.compiler", {anonymous = true}).has_features(features, opt)
 end
 
@@ -2614,7 +2643,7 @@ end
 --
 function _instance:check_sizeof(typename, opt)
     opt = opt or {}
-    opt.target = self
+    opt.target = self:_checked_target()
     return sandbox_module.import("lib.detect.check_sizeof", {anonymous = true})(typename, opt)
 end
 
@@ -2627,7 +2656,7 @@ end
 --
 function _instance:check_csnippets(snippets, opt)
     opt = opt or {}
-    opt.target = self
+    opt.target = self:_checked_target()
     return sandbox_module.import("lib.detect.check_csnippets", {anonymous = true})(snippets, opt)
 end
 
@@ -2653,7 +2682,7 @@ end
 --
 function _instance:check_msnippets(snippets, opt)
     opt = opt or {}
-    opt.target = self
+    opt.target = self:_checked_target()
     return sandbox_module.import("lib.detect.check_msnippets", {anonymous = true})(snippets, opt)
 end
 
@@ -2666,7 +2695,7 @@ end
 --
 function _instance:check_mxxsnippets(snippets, opt)
     opt = opt or {}
-    opt.target = self
+    opt.target = self:_checked_target()
     return sandbox_module.import("lib.detect.check_mxxsnippets", {anonymous = true})(snippets, opt)
 end
 
@@ -2768,7 +2797,9 @@ function target.apis()
         ,   "target.on_clean"
         ,   "target.on_package"
         ,   "target.on_install"
+        ,   "target.on_installcmd"
         ,   "target.on_uninstall"
+        ,   "target.on_uninstallcmd"
             -- target.before_xxx
         ,   "target.before_run"
         ,   "target.before_test"
@@ -2779,7 +2810,9 @@ function target.apis()
         ,   "target.before_clean"
         ,   "target.before_package"
         ,   "target.before_install"
+        ,   "target.before_installcmd"
         ,   "target.before_uninstall"
+        ,   "target.before_uninstallcmd"
             -- target.after_xxx
         ,   "target.after_run"
         ,   "target.after_test"
@@ -2791,7 +2824,9 @@ function target.apis()
         ,   "target.after_clean"
         ,   "target.after_package"
         ,   "target.after_install"
+        ,   "target.after_installcmd"
         ,   "target.after_uninstall"
+        ,   "target.after_uninstallcmd"
         }
     }
 end

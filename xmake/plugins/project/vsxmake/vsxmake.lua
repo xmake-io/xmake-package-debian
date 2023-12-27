@@ -27,7 +27,7 @@ import("getinfo")
 import("core.project.config")
 import("core.cache.localcache")
 
-local template_root = path.join(os.scriptdir(), "vsproj", "templates")
+local template_root = path.join(os.programdir(), "scripts", "vsxmake", "vsproj", "templates")
 local template_sln = path.join(template_root, "sln", "vsxmake.sln")
 local template_vcx = path.join(template_root, "vcxproj", "#target#.vcxproj")
 
@@ -143,7 +143,7 @@ function _buildparams(info, target, default)
             local files = table.join(info._targets[target].headerfiles or {}, info._targets[target].extrafiles)
             table.insert(r, _filter_files(files, nil, {".natvis"}))
         elseif args.incnatvis then
-            local files = info._targets[target].headerfiles
+            local files = table.join(info._targets[target].headerfiles or {}, info._targets[target].extrafiles)
             table.insert(r, _filter_files(files, {".natvis"}))
         end
         return r

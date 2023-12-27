@@ -26,6 +26,7 @@ import("core.tool.linker")
 import("core.tool.compiler")
 import("lib.detect.find_tool")
 import("private.utils.executable_path")
+import("private.utils.toolchain", {alias = "toolchain_utils"})
 
 -- get build directory
 function _get_buildir(package, opt)
@@ -73,16 +74,136 @@ function _translate_flags(package, flags)
             end
         end
         flags = flags_new
+    elseif package:is_plat("windows") then
+        for idx, flag in ipairs(flags) do
+            -- @see https://github.com/xmake-io/xmake/issues/4407
+            if flag:startswith("-libpath:") then
+                flags[idx] = flag:gsub("%-libpath:", "/libpath:")
+            end
+        end
     end
     return flags
 end
 
+function _insert_cross_configs(package, file, opt)
+    -- host machine
+    file:print("[host_machine]")
+    if opt.host_machine then
+        file:print("%s", opt.host_machine)
+    elseif package:is_plat("iphoneos", "macosx") then
+        local cpu
+        local cpu_family
+        if package:is_arch("arm64") then
+            cpu = "aarch64"
+            cpu_family = "aarch64"
+        elseif package:is_arch("armv7") then
+            cpu = "arm"
+            cpu_family = "arm"
+        elseif package:is_arch("x64", "x86_64") then
+            cpu = "x86_64"
+            cpu_family = "x86_64"
+        elseif package:is_arch("x86", "i386") then
+            cpu = "i686"
+            cpu_family = "x86"
+        else
+            raise("unsupported arch(%s)", package:arch())
+        end
+        file:print("system = 'darwin'")
+        file:print("cpu_family = '%s'", cpu_family)
+        file:print("cpu = '%s'", cpu)
+        file:print("endian = 'little'")
+    elseif package:is_plat("android") then
+        local cpu
+        local cpu_family
+        if package:is_arch("arm64-v8a") then
+            cpu = "aarch64"
+            cpu_family = "aarch64"
+        elseif package:is_arch("armeabi-v7a") then
+            cpu = "arm"
+            cpu_family = "arm"
+        elseif package:is_arch("x64", "x86_64") then
+            cpu = "x86_64"
+            cpu_family = "x86_64"
+        elseif package:is_arch("x86", "i386") then
+            cpu = "i686"
+            cpu_family = "x86"
+        else
+            raise("unsupported arch(%s)", package:arch())
+        end
+        file:print("system = 'android'")
+        file:print("cpu_family = '%s'", cpu_family)
+        file:print("cpu = '%s'", cpu)
+        file:print("endian = 'little'")
+    elseif package:is_plat("mingw") then
+        local cpu
+        local cpu_family
+        if package:is_arch("x64", "x86_64") then
+            cpu = "x86_64"
+            cpu_family = "x86_64"
+        elseif package:is_arch("x86", "i386") then
+            cpu = "i686"
+            cpu_family = "x86"
+        else
+            raise("unsupported arch(%s)", package:arch())
+        end
+        file:print("system = 'windows'")
+        file:print("cpu_family = '%s'", cpu_family)
+        file:print("cpu = '%s'", cpu)
+        file:print("endian = 'little'")
+    elseif package:is_plat("windows") then
+        local cpu
+        local cpu_family
+        if package:is_arch("arm64") then
+            cpu = "aarch64"
+            cpu_family = "aarch64"
+        elseif package:is_arch("x86") then
+            cpu = "x86"
+            cpu_family = "x86"
+        elseif package:is_arch("x64") then
+            cpu = "x86_64"
+            cpu_family = "x86_64"
+        else
+            raise("unsupported arch(%s)", package:arch())
+        end
+        file:print("system = 'windows'")
+        file:print("cpu_family = '%s'", cpu_family)
+        file:print("cpu = '%s'", cpu)
+        file:print("endian = 'little'")
+    elseif package:is_plat("wasm") then
+        file:print("system = 'emscripten'")
+        file:print("cpu_family = 'wasm32'")
+        file:print("cpu = 'wasm32'")
+        file:print("endian = 'little'")
+    else
+        local cpu = package:arch()
+        if package:is_arch("arm64") or package:is_arch("aarch64") then
+            cpu = "aarch64"
+        elseif package:is_arch("arm.*") then
+            cpu = "arm"
+        end
+        local cpu_family = cpu
+        file:print("system = '%s'", package:targetos() or "linux")
+        file:print("cpu_family = '%s'", cpu_family)
+        file:print("cpu = '%s'", cpu)
+        file:print("endian = 'little'")
+    end
+end
+
+-- is the toolchain compatible with the host?
+function _is_toolchain_compatible_with_host(package)
+    for _, name in ipairs(package:config("toolchains")) do
+        if toolchain_utils.is_compatible_with_host(name) then
+            return true
+        end
+    end
+end
+
 -- get cross file
-function _get_cross_file(package, opt)
+function _get_configs_file(package, opt)
     opt = opt or {}
-    local crossfile = path.join(_get_buildir(package, opt), "cross_file.txt")
-    if not os.isfile(crossfile) then
-        local file = io.open(crossfile, "w")
+    local configsfile = path.join(_get_buildir(package, opt), "configs_file.txt")
+    if not os.isfile(configsfile) then
+        local file = io.open(configsfile, "w")
         -- binaries
         file:print("[binaries]")
         local cc = package:build_getenv("cc")
@@ -148,126 +269,25 @@ function _get_cross_file(package, opt)
         table.join2(ldflags,  _get_ldflags_from_packagedeps(package, opt))
         table.join2(shflags,  _get_ldflags_from_packagedeps(package, opt))
         if #cflags > 0 then
-            cflags = _translate_flags(package, cflags)
             file:print("c_args=['%s']", table.concat(cflags, "', '"))
         end
         if #cxxflags > 0 then
-            cxxflags = _translate_flags(package, cxxflags)
             file:print("cpp_args=['%s']", table.concat(cxxflags, "', '"))
         end
         local linkflags = table.join(ldflags or {}, shflags)
         if #linkflags > 0 then
-            linkflags = _translate_flags(package, linkflags)
             file:print("c_link_args=['%s']", table.concat(linkflags, "', '"))
             file:print("cpp_link_args=['%s']", table.concat(linkflags, "', '"))
         end
-        file:print("")
 
-        -- host machine
-        file:print("[host_machine]")
-        if opt.host_machine then
-            file:print("%s", opt.host_machine)
-        elseif package:is_plat("iphoneos", "macosx") then
-            local cpu
-            local cpu_family
-            if package:is_arch("arm64") then
-                cpu = "aarch64"
-                cpu_family = "aarch64"
-            elseif package:is_arch("armv7") then
-                cpu = "arm"
-                cpu_family = "arm"
-            elseif package:is_arch("x64", "x86_64") then
-                cpu = "x86_64"
-                cpu_family = "x86_64"
-            elseif package:is_arch("x86", "i386") then
-                cpu = "i686"
-                cpu_family = "x86"
-            else
-                raise("unsupported arch(%s)", package:arch())
-            end
-            file:print("system = 'darwin'")
-            file:print("cpu_family = '%s'", cpu_family)
-            file:print("cpu = '%s'", cpu)
-            file:print("endian = 'little'")
-        elseif package:is_plat("android") then
-            local cpu
-            local cpu_family
-            if package:is_arch("arm64-v8a") then
-                cpu = "aarch64"
-                cpu_family = "aarch64"
-            elseif package:is_arch("armeabi-v7a") then
-                cpu = "arm"
-                cpu_family = "arm"
-            elseif package:is_arch("x64", "x86_64") then
-                cpu = "x86_64"
-                cpu_family = "x86_64"
-            elseif package:is_arch("x86", "i386") then
-                cpu = "i686"
-                cpu_family = "x86"
-            else
-                raise("unsupported arch(%s)", package:arch())
-            end
-            file:print("system = 'android'")
-            file:print("cpu_family = '%s'", cpu_family)
-            file:print("cpu = '%s'", cpu)
-            file:print("endian = 'little'")
-        elseif package:is_plat("mingw") then
-            local cpu
-            local cpu_family
-            if package:is_arch("x64", "x86_64") then
-                cpu = "x86_64"
-                cpu_family = "x86_64"
-            elseif package:is_arch("x86", "i386") then
-                cpu = "i686"
-                cpu_family = "x86"
-            else
-                raise("unsupported arch(%s)", package:arch())
-            end
-            file:print("system = 'windows'")
-            file:print("cpu_family = '%s'", cpu_family)
-            file:print("cpu = '%s'", cpu)
-            file:print("endian = 'little'")
-        elseif package:is_plat("windows") then
-            local cpu
-            local cpu_family
-            if package:is_arch("arm64") then
-                cpu = "aarch64"
-                cpu_family = "aarch64"
-            elseif package:is_arch("x86") then
-                cpu = "x86"
-                cpu_family = "x86"
-            elseif package:is_arch("x64") then
-                cpu = "x86_64"
-                cpu_family = "x86_64"
-            else
-                raise("unsupported arch(%s)", package:arch())
-            end
-            file:print("system = 'windows'")
-            file:print("cpu_family = '%s'", cpu_family)
-            file:print("cpu = '%s'", cpu)
-            file:print("endian = 'little'")
-        elseif package:is_plat("wasm") then
-            file:print("system = 'emscripten'")
-            file:print("cpu_family = 'wasm32'")
-            file:print("cpu = 'wasm32'")
-            file:print("endian = 'little'")
-        else
-            local cpu = package:arch()
-            if package:is_arch("arm64") or package:is_arch("aarch64") then
-                cpu = "aarch64"
-            elseif package:is_arch("arm.*") then
-                cpu = "arm"
-            end
-            local cpu_family = cpu
-            file:print("system = '%s'", package:targetos() or "linux")
-            file:print("cpu_family = '%s'", cpu_family)
-            file:print("cpu = '%s'", cpu)
-            file:print("endian = 'little'")
+        if package:is_cross() or opt.cross then
+            file:print("")
+            _insert_cross_configs(package, file, opt)
+            file:print("")
         end
-        file:print("")
         file:close()
     end
-    return crossfile
+    return configsfile
 end
 
 -- get configs
@@ -303,8 +323,14 @@ function _get_configs(package, configs, opt)
     end
 
     -- add cross file
-    if package:is_cross() then
-        table.insert(configs, "--cross-file=" .. _get_cross_file(package, opt))
+    if package:is_cross() or package:is_plat("mingw") then
+        table.insert(configs, "--cross-file=" .. _get_configs_file(package, opt))
+    elseif package:config("toolchains") then
+        if _is_toolchain_compatible_with_host(package) then
+            table.insert(configs, "--native-file=" .. _get_configs_file(package, opt))
+        else
+            table.insert(configs, "--cross-file=" .. _get_configs_file(package, table.join2(opt, {cross = true})))
+        end
     end
 
     -- add build directory
@@ -327,7 +353,7 @@ end
 -- fix libname on windows
 function _fix_libname_on_windows(package)
     for _, lib in ipairs(os.files(path.join(package:installdir("lib"), "lib*.a"))) do
-        os.mv(lib, lib:gsub("(.+)lib(.-)%.a", "%1%2.lib"))
+        os.mv(lib, lib:gsub("(.+)\\lib(.-)%.a", "%1\\%2.lib"))
     end
 end
 
@@ -345,7 +371,7 @@ function _get_cflags_from_packagedeps(package, opt)
             end
         end
     end
-    return result
+    return _translate_flags(package, result)
 end
 
 -- get ldflags from package deps
@@ -362,7 +388,7 @@ function _get_ldflags_from_packagedeps(package, opt)
             end
         end
     end
-    return result
+    return _translate_flags(package, result)
 end
 
 -- get the build environments

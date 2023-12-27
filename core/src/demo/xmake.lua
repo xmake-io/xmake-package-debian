@@ -10,6 +10,8 @@ target("demo")
 
     -- make as a binary
     set_kind("binary")
+    set_basename("xmake")
+    set_targetdir("$(buildir)")
 
     -- add definitions
     add_defines("__tb_prefix__=\"xmake\"")
@@ -50,8 +52,39 @@ target("demo")
         end
     end
 
-    -- copy target to the build directory
-    after_build(function (target)
-        os.cp(target:targetfile(), "$(buildir)/xmake" .. (is_plat("windows") and ".exe" or ""))
+    -- add install files
+    if is_plat("windows") then
+        add_installfiles("$(projectdir)/../LICENSE.md")
+        add_installfiles("$(projectdir)/../NOTICE.md")
+        add_installfiles("$(projectdir)/../xmake/(**.lua)")
+        add_installfiles("$(projectdir)/../xmake/(scripts/**)")
+        add_installfiles("$(projectdir)/../xmake/(templates/**)")
+        add_installfiles("$(projectdir)/../scripts/xrepo.bat")
+        add_installfiles("$(projectdir)/../scripts/xrepo.ps1")
+    else
+        add_installfiles("$(projectdir)/../(xmake/**.lua)", {prefixdir = "share"})
+        add_installfiles("$(projectdir)/../(xmake/scripts/**)", {prefixdir = "share"})
+        add_installfiles("$(projectdir)/../(xmake/templates/**)", {prefixdir = "share"})
+        add_installfiles("$(projectdir)/../scripts/xrepo.sh", {prefixdir = "bin", filename = "xrepo"})
+    end
+
+    before_installcmd(function (target, batchcmds, opt)
+        -- we need to avoid some old files interfering with xmake's module import.
+        local package = opt.package
+        if target:is_plat("windows") then
+            batchcmds:rmdir(package:installdir("actions"))
+            batchcmds:rmdir(package:installdir("core"))
+            batchcmds:rmdir(package:installdir("includes"))
+            batchcmds:rmdir(package:installdir("languages"))
+            batchcmds:rmdir(package:installdir("modules"))
+            batchcmds:rmdir(package:installdir("platforms"))
+            batchcmds:rmdir(package:installdir("plugins"))
+            batchcmds:rmdir(package:installdir("repository"))
+            batchcmds:rmdir(package:installdir("rules"))
+            batchcmds:rmdir(package:installdir("templates"))
+            batchcmds:rmdir(package:installdir("scripts"))
+            batchcmds:rmdir(package:installdir("themes"))
+            batchcmds:rmdir(package:installdir("toolchains"))
+        end
     end)
 
