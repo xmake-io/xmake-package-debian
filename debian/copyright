@@ -2,8 +2,7 @@ Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: xmake
 Upstream-Contact: ruki <waruqi@gmail.com>
 Source: https://github.com/xmake-io/xmake
-Files-Excluded: xmake/plugins/project/vsxmake/vsproj/templates/sln/vsxmake.sln
-                core/src/lua
+Files-Excluded: core/src/lua
                 core/src/lua-cjson
                 core/src/lz4
                 core/src/sv
