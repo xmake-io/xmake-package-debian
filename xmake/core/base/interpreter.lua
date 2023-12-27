@@ -1271,7 +1271,10 @@ function interpreter:api_register_add_groups(scope_kind, ...)
         values = table.join(table.unpack(values))
 
         -- save values
-        scope[name] = scope[name] or {}
+        --
+        -- @note maybe scope[name] has been unwrapped, we need wrap it first
+        -- https://github.com/xmake-io/xmake/issues/4428
+        scope[name] = table.wrap(scope[name])
         table.wrap_lock(values)
         table.insert(scope[name], values)
 
@@ -1897,11 +1900,15 @@ function interpreter:api_interp_add_scopeapis(...)
     else
         extra_config = nil
     end
-    local kind = "values"
-    if extra_config and extra_config.kind then
-        kind = extra_config.kind
+    if extra_config and #apis == 0 then
+        self:api_define(extra_config)
+    else
+        local kind = "values"
+        if extra_config and extra_config.kind then
+            kind = extra_config.kind
+        end
+        return self:api_define({[kind] = apis})
     end
-    return self:api_define({[kind] = apis})
 end
 
 -- get api function

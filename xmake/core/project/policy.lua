@@ -100,6 +100,8 @@ function policy.policies()
             ["package.install_only"]              = {description = "Only install packages from remote.", type = "boolean"},
             -- Always install packages every time
             ["package.install_always"]            = {description = "Always install packages every time.", type = "boolean"},
+            -- Install packages in the local project folder
+            ["package.install_locally"]           = {description = "Install packages in the local project folder.", default = false, type = "boolean"},
             -- Set custom headers when downloading package
             ["package.download.http_headers"]     = {description = "Set the custom http headers when downloading package."},
             -- Use includes as external header files? e.g. -isystem ..
@@ -124,7 +126,10 @@ function policy.policies()
             -- Return zero as exit code on failure
             ["test.return_zero_on_failure"]       = {description = "Return zero as the exit code on failure", default = false, type = "boolean"},
             -- Show diagnosis info for checking build dependencies
-            ["diagnosis.check_build_deps"]        = {description = "Show diagnosis info for checking build dependencies", default = false, type = "boolean"}
+            ["diagnosis.check_build_deps"]        = {description = "Show diagnosis info for checking build dependencies", default = false, type = "boolean"},
+            -- Set the network mode, e.g. public/private
+            --   private: it will disable fetch remote package repositories
+            ["network.mode"]                      = {description = "Set the network mode", type = "string"}
         }
         policy._POLICIES = policies
     end

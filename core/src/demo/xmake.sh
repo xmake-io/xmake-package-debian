@@ -24,7 +24,14 @@ target "demo"
 
     # add install files
     add_installfiles "${projectdir}/(xmake/**.lua)" "share"
-    add_installfiles "${projectdir}/(xmake/scripts/**)" "share"
+    add_installfiles "${projectdir}/(xmake/scripts/*)" "share"
+    add_installfiles "${projectdir}/(xmake/scripts/cmake_importfiles/**)" "share"
+    add_installfiles "${projectdir}/(xmake/scripts/completions/**)" "share"
+    add_installfiles "${projectdir}/(xmake/scripts/xpack/**)" "share"
+    add_installfiles "${projectdir}/(xmake/scripts/xrepo/**)" "share"
+    add_installfiles "${projectdir}/(xmake/scripts/virtualenvs/**)" "share"
+    add_installfiles "${projectdir}/(xmake/scripts/pac/**)" "share"
+    add_installfiles "${projectdir}/(xmake/scripts/conan/**)" "share"
     add_installfiles "${projectdir}/(xmake/templates/**)" "share"
     add_installfiles "${projectdir}/scripts/xrepo.sh" "bin" "xrepo"
 
@@ -39,8 +46,7 @@ target "demo"
     #
     # @see https://github.com/xmake-io/xmake/issues/3628
     if is_host "msys"; then
-        add_installfiles "${projectdir}/scripts/msys/xmake.sh" "bin" "xmake"
-        add_installfiles "${buildir}/xmake.exe" "share/xmake"
+        after_install "xmake_after_install"
     fi
 
     # add syslinks
@@ -56,3 +62,13 @@ target "demo"
     else
         add_syslinks "pthread" "dl" "m" "c"
     fi
+
+xmake_after_install() {
+    local target=${1}
+    local installdir=${2}
+    if test_eq "${project_generator}" "gmake"; then
+        print "\t@if test -f ${installdir}/bin/xmake.exe; then rm ${installdir}/bin/xmake.exe; fi" >> "${xmake_sh_makefile}"
+        print "\t@cp ${projectdir}/scripts/msys/xmake.sh ${installdir}/bin/xmake" >> "${xmake_sh_makefile}"
+        print "\t@cp ${buildir}/xmake.exe ${installdir}/share/xmake" >> "${xmake_sh_makefile}"
+    fi
+}

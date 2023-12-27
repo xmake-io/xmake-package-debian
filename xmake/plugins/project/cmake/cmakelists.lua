@@ -621,6 +621,13 @@ end
 function _add_target_exceptions(cmakelists, target)
     local flags_gcc =
     {
+        cxx = "-fexceptions",
+        ["no-cxx"] = "-fno-exceptions",
+        objc = "-fobjc-exceptions",
+        ["no-objc"] = "-fno-objc-exceptions"
+    }
+    local flags_clang =
+    {
         cxx = "-fcxx-exceptions",
         ["no-cxx"] = "-fno-cxx-exceptions",
         objc = "-fobjc-exceptions",
@@ -640,6 +647,10 @@ function _add_target_exceptions(cmakelists, target)
             -- msvc or clang-cl
             for _, exception in ipairs(exceptions) do
                 cmakelists:print("    target_compile_options(%s PRIVATE %s)", target:name(), flags_msvc[exception])
+            end
+            cmakelists:print("elseif(Clang)")
+            for _, exception in ipairs(exceptions) do
+                cmakelists:print("    target_compile_options(%s PRIVATE %s)", target:name(), flags_clang[exception])
             end
             cmakelists:print("else()")
             for _, exception in ipairs(exceptions) do
@@ -897,6 +908,8 @@ function _get_command_string(cmd, outputdir)
         end
     elseif kind == "rm" then
         return string.format("${CMAKE_COMMAND} -E rm -rf %s", _get_relative_unix_path_to_cmake(cmd.filepath, outputdir))
+    elseif kind == "rmdir" then
+        return string.format("${CMAKE_COMMAND} -E rm -rf %s", _get_relative_unix_path_to_cmake(cmd.dir, outputdir))
     elseif kind == "mv" then
         return string.format("${CMAKE_COMMAND} -E rename %s %s",
             _get_relative_unix_path_to_cmake(cmd.srcpath, outputdir), _get_relative_unix_path_to_cmake(cmd.dstpath, outputdir))

@@ -578,7 +578,16 @@ function _instance:is_fetchonly()
     if project and project.policy("package.fetch_only") then
         return true
     end
-    return self:get("fetch") and not self:get("install")
+    -- only fetch script
+    if self:get("fetch") and not self:get("install") then
+        return true
+    end
+    -- only from system
+    local requireinfo = self:requireinfo()
+    if requireinfo and requireinfo.system then
+        return true
+    end
+    return false
 end
 
 -- is optional package?
@@ -633,7 +642,15 @@ end
 -- is local package?
 -- we will use local installdir and cachedir in current project
 function _instance:is_local()
-    return self:is_source_embed() or self:is_binary_embed() or self:is_thirdparty()
+    return self._IS_LOCAL or self:is_source_embed() or self:is_binary_embed() or self:is_thirdparty()
+end
+
+-- mark it as local package
+function _instance:_mark_as_local(is_local)
+    if self:is_local() ~= is_local then
+        self._INSTALLDIR = nil
+        self._IS_LOCAL = is_local
+    end
 end
 
 -- use external includes?
@@ -890,10 +907,10 @@ function _instance:manifest_save()
     end
 
     -- save deps
-    if self:deps() then
+    if self:librarydeps() then
         manifest.deps = {}
-        for name, dep in pairs(self:deps()) do
-            manifest.deps[name] = {
+        for _, dep in ipairs(self:librarydeps()) do
+            manifest.deps[dep:name()] = {
                 version = dep:version_str(),
                 buildhash = dep:buildhash()
             }
@@ -1601,6 +1618,7 @@ function _instance:_fetch_tool(opt)
             end
         end
     end
+    -- we can disable to fallback fetch if on_fetch return false
     if fetchinfo == nil then
         self._find_tool = self._find_tool or sandbox_module.import("lib.detect.find_tool", {anonymous = true})
         if opt.system then
@@ -1763,12 +1781,6 @@ function _instance:fetch(opt)
         return fetchinfo
     end
 
-    -- install only?
-    local project = package._project()
-    if project and project.policy("package.install_only") then
-        return
-    end
-
     -- fetch the require version
     local require_ver = opt.version or self:requireinfo().version
     if not self:is_thirdparty() and not require_ver:find('.', 1, true) then
@@ -1789,12 +1801,35 @@ function _instance:fetch(opt)
         system = nil
     end
 
+    -- install only?
+    local project = package._project()
+    if project and project.policy("package.install_only") then
+        system = false
+    end
+
     -- use sysincludedirs/-isystem instead of -I?
     local external
     if opt.external ~= nil then
         external = opt.external
     else
         external = self:use_external_includes()
+    end
+
+    -- always install to the local project directory?
+    -- @see https://github.com/xmake-io/xmake/pull/4376
+    local install_locally
+    if project and project.policy("package.install_locally") then
+        install_locally = true
+    end
+    if install_locally == nil and self:policy("package.install_locally") then
+        install_locally = true
+    end
+    if not self:is_local() and install_locally and system ~= true then
+        local has_global = os.isfile(self:manifest_file())
+        self:_mark_as_local(true)
+        if has_global and not os.isfile(self:manifest_file()) then
+            self:_mark_as_local(false)
+        end
     end
 
     -- fetch binary tool?

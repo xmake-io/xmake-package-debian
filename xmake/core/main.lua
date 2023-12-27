@@ -65,7 +65,7 @@ function main._show_help()
     if option.get("help") then
         option.show_menu(option.taskname())
         return true
-    elseif option.get("version") then
+    elseif option.get("version") and not option.taskname() then
         if menu.title then
             utils.cprint(menu.title)
         end
@@ -238,6 +238,11 @@ function main._exit(ok, errors)
     return retval
 end
 
+-- limit root? @see https://github.com/xmake-io/xmake/pull/4513
+function main._limit_root()
+    return not option.get("root") and os.getenv("XMAKE_ROOT") ~= 'y' and os.host() ~= 'haiku'
+end
+
 -- the main entry function
 function main.entry()
 
@@ -266,7 +271,7 @@ function main.entry()
     end
 
     -- check run command as root
-    if not option.get("root") and os.getenv("XMAKE_ROOT") ~= 'y' then
+    if main._limit_root() then
         if os.isroot() then
             errors = [[Running xmake as root is extremely dangerous and no longer supported.
 As xmake does not drop privileges on installation you would be giving all

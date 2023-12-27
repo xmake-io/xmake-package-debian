@@ -140,7 +140,15 @@ end
 function _runcmd_rm(cmd, opt)
     local filepath = cmd.filepath
     if not opt.dryrun then
-        os.tryrm(filepath)
+        os.tryrm(filepath, opt)
+    end
+end
+
+-- run command: os.rmdir
+function _runcmd_rmdir(cmd, opt)
+    local dir = cmd.dir
+    if not opt.dryrun and os.isdir(dir) then
+        os.tryrm(dir, opt)
     end
 end
 
@@ -178,6 +186,7 @@ function _runcmd(cmd, opt)
             execv  = _runcmd_execv,
             vexecv = _runcmd_vexecv,
             mkdir  = _runcmd_mkdir,
+            rmdir  = _runcmd_rmdir,
             cd     = _runcmd_cd,
             rm     = _runcmd_rm,
             cp     = _runcmd_cp,
@@ -333,9 +342,14 @@ function batchcmds:mkdir(dir)
     table.insert(self:cmds(), {kind = "mkdir", dir = dir})
 end
 
+-- add command: os.rmdir
+function batchcmds:rmdir(dir, opt)
+    table.insert(self:cmds(), {kind = "rmdir", dir = dir, opt = opt})
+end
+
 -- add command: os.rm
-function batchcmds:rm(filepath)
-    table.insert(self:cmds(), {kind = "rm", filepath = filepath})
+function batchcmds:rm(filepath, opt)
+    table.insert(self:cmds(), {kind = "rm", filepath = filepath, opt = opt})
 end
 
 -- add command: os.cp
@@ -362,6 +376,11 @@ end
 function batchcmds:show(format, ...)
     local showtext = string.format(format, ...)
     table.insert(self:cmds(), {kind = "show", showtext = showtext})
+end
+
+-- add raw command for the specific generator or xpack format
+function batchcmds:rawcmd(kind, rawstr)
+    table.insert(self:cmds(), {kind = kind, rawstr = rawstr})
 end
 
 -- add command: show progress
