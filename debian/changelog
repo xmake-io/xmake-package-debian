@@ -2,6 +2,7 @@ xmake (2.8.6+ds-1) unstable; urgency=medium
 
   * New upstream release.
   * d/copyright: Remove vsxmake.sln from Files-Excluded, does not exist.
+  * d/patches: Refresh convert_local_source_to_external_dependencies.patch.
 
  -- Lance Lin <lq27267@gmail.com>  Wed, 27 Dec 2023 20:58:13 +0700
 
