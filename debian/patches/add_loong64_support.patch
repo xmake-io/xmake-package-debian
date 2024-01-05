@@ -1,0 +1,50 @@
+Bug: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1059959
+Description: Add support for loong64 architecture
+Author: liuxiang <liuxiang@loongson.cn>, Lance Lin <lq27267@gmail.com>
+Forwarded: https://github.com/xmake-io/xmake/pull/4573
+Date: 05 Jan 2023
+
+--- a/configure
++++ b/configure
+@@ -2718,7 +2718,7 @@
+                             - linux
+   --arch=ARCH             Compile for the given architecture. (default: '"${_target_arch_default}"')
+                             - msys: i386 x86_64
+-                            - cross: i386 x86_64 arm arm64 mips mips64 riscv riscv64 s390x ppc ppc64 sh4
++                            - cross: i386 x86_64 arm arm64 mips mips64 riscv riscv64 loong64 s390x ppc ppc64 sh4
+                             - bsd: i386 x86_64
+                             - mingw: i386 x86_64 arm arm64
+                             - macosx: x86_64 arm64
+--- a/xmake/modules/private/detect/find_platform.lua
++++ b/xmake/modules/private/detect/find_platform.lua
+@@ -66,6 +66,8 @@
+             arch = "riscv64"
+         elseif cross:find("riscv", 1, true) then
+             arch = "riscv"
++        elseif cross:find("loong64", 1, true) then
++            arch = "loong64"
+         elseif cross:find("s390x", 1, true) then
+             arch = "s390x"
+         elseif cross:find("powerpc64", 1, true) then
+--- a/xmake/platforms/cross/xmake.lua
++++ b/xmake/platforms/cross/xmake.lua
+@@ -20,7 +20,7 @@
+ 
+ platform("cross")
+     set_hosts("macosx", "linux", "windows", "bsd")
+-    set_archs("i386", "x86_64", "arm", "arm64", "mips", "mips64", "riscv", "riscv64", "s390x", "ppc", "ppc64", "sh4")
++    set_archs("i386", "x86_64", "arm", "arm64", "mips", "mips64", "riscv", "riscv64", "loong64", "s390x", "ppc", "ppc64", "sh4")
+ 
+     set_formats("static", "lib$(name).a")
+     set_formats("object", "$(name).o")
+--- a/xmake/toolchains/zig/xmake.lua
++++ b/xmake/toolchains/zig/xmake.lua
+@@ -78,6 +78,8 @@
+             arch = "i386"
+         elseif toolchain:is_arch("riscv64") then
+             arch = "riscv64"
++        elseif toolchain:is_arch("loong64") then
++            arch = "loong64"
+         elseif toolchain:is_arch("mips.*") then
+             arch = toolchain:arch()
+         elseif toolchain:is_arch("ppc64") then
