@@ -1,0 +1,3 @@
+# False positives
+xmake-data: extra-license-file [usr/share/xmake/modules/core/base/license.lua]
+xmake-data: extra-license-file [usr/share/xmake/modules/private/check/checkers/api/target/license.lua]
