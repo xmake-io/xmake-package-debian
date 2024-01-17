@@ -14,8 +14,5 @@ build-indep:
 override_dh_auto_configure:
 	dh_auto_configure -- $(DEB_CONFIGURE_EXTRA_FLAGS)
 
-execute_after_dh_installdocs:
-	find debian/ -type f -name license.lua -exec rm -f {} \;
-
 execute_after_dh_fixperms:
 	find debian/ -type f -name update-script.sh -exec chmod 755 {} \;
