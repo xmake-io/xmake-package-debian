@@ -1,9 +1,9 @@
-xmake (2.8.6+ds-3) UNRELEASED; urgency=medium
+xmake (2.8.6+ds-3) unstable; urgency=medium
 
   * d/rules: Still install license.lua files.
   * d/xmake-data.lintian-overrides: False positive for extra-license-file.
 
- -- Lance Lin <lq27267@gmail.com>  Wed, 17 Jan 2024 20:29:49 +0700
+ -- Lance Lin <lq27267@gmail.com>  Wed, 17 Jan 2024 20:39:41 +0700
 
 xmake (2.8.6+ds-2) unstable; urgency=medium
 
