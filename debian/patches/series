@@ -1,3 +1,2 @@
 replace_unusual_interpreter.patch
 convert_local_source_to_external_dependencies.patch
-add_loong64_support.patch

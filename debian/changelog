@@ -1,6 +1,7 @@
 xmake (2.8.7+ds-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * d/patches: Remove add_loong64_support.patch, applied upstream.
 
  -- Lance Lin <lq27267@gmail.com>  Tue, 27 Feb 2024 20:19:29 +0700
 
