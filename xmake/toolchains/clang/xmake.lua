@@ -25,18 +25,17 @@ if version then
     suffix = suffix .. "-" .. version
 end
 toolchain("clang" .. suffix)
-
+    set_kind("standalone")
     set_homepage("https://clang.llvm.org/")
     set_description("A C language family frontend for LLVM" .. (version and (" (" .. version .. ")") or ""))
-
-    set_kind("standalone")
+    set_runtimes("c++_static", "c++_shared", "stdc++_static", "stdc++_shared")
 
     set_toolset("cc", "clang" .. suffix)
     set_toolset("cxx", "clang" .. suffix, "clang++" .. suffix)
     set_toolset("ld", "clang++" .. suffix, "clang" .. suffix)
     set_toolset("sh", "clang++" .. suffix, "clang" .. suffix)
-    set_toolset("ar", "ar")
-    set_toolset("strip", "strip")
+    set_toolset("ar", "ar", "llvm-ar")
+    set_toolset("strip", "strip", "llvm-strip")
     set_toolset("mm", "clang" .. suffix)
     set_toolset("mxx", "clang" .. suffix, "clang++" .. suffix)
     set_toolset("as", "clang" .. suffix)
@@ -59,6 +58,9 @@ toolchain("clang" .. suffix)
             toolchain:add("asflags", march)
             toolchain:add("ldflags", march)
             toolchain:add("shflags", march)
+        end
+        if toolchain:is_plat("windows") then
+            toolchain:add("runtimes", "MT", "MTd", "MD", "MDd")
         end
     end)
 end

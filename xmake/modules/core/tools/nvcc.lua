@@ -25,6 +25,7 @@ import("core.project.config")
 import("core.project.project")
 import("core.platform.platform")
 import("core.language.language")
+import("core.project.policy")
 import("utils.progress")
 
 -- init it
@@ -36,19 +37,12 @@ function init(self)
         self:set("binary.cuflags", "-Xcompiler -fPIE")
     end
 
-    -- add -ccbin
-    local cu_ccbin = platform.tool("cu-ccbin")
-    if cu_ccbin then
-        self:add("cuflags", "-ccbin=" .. os.args(cu_ccbin))
-    end
-
     -- init flags map
-    self:set("mapflags",
-    {
+    self:set("mapflags", {
         -- warnings
-        ["-W4"]            = "-Wreorder"
-    ,   ["-Wextra"]        = "-Wreorder"
-    ,   ["-Weverything"]   = "-Wreorder"
+        ["-W4"]            = "-Wreorder --Wno-deprecated-gpu-targets --Wno-deprecated-declarations"
+    ,   ["-Wextra"]        = "-Wreorder --Wno-deprecated-gpu-targets --Wno-deprecated-declarations"
+    ,   ["-Weverything"]   = "-Wreorder --Wno-deprecated-gpu-targets --Wno-deprecated-declarations"
     })
 end
 
@@ -96,8 +90,8 @@ function nf_warning(self, level)
     local maps =
     {
         none       = "-w"
-    ,   everything = "-Wreorder"
-    ,   error      = "-Werror"
+    ,   everything = { "-Wreorder", "--Wno-deprecated-gpu-targets", "--Wno-deprecated-declarations" }
+    ,   error      = { "-Werror", "cross-execution-space-call,reorder,deprecated-declarations" }
     }
 
     -- for cl.exe on windows
@@ -143,7 +137,9 @@ function nf_warning(self, level)
         host_warning = gcc_clang_maps[level]
     end
     if host_warning then
-        warning = ((warning or "") .. ' -Xcompiler "' .. host_warning .. '"'):trim()
+        warning = table.wrap(warning)
+        table.insert(warning, '-Xcompiler')
+        table.insert(warning, host_warning)
     end
     return warning
 
@@ -168,9 +164,15 @@ function nf_optimize(self, level)
 end
 
 -- make vs runtime flag
-function nf_runtime(self, vs_runtime)
-    if self:is_plat("windows") and vs_runtime then
-        return '-Xcompiler "-' .. vs_runtime .. '"'
+function nf_runtime(self, runtime)
+    if self:is_plat("windows") and runtime then
+        local maps = {
+            MT = '-Xcompiler "-MT"',
+            MD = '-Xcompiler "-MD"',
+            MTd = '-Xcompiler "-MTd"',
+            MDd = '-Xcompiler "-MDd"'
+        }
+        return maps[runtime]
     end
 end
 
@@ -344,7 +346,7 @@ function compargv(self, sourcefile, objectfile, flags)
 end
 
 -- compile the source file
-function compile(self, sourcefile, objectfile, dependinfo, flags)
+function compile(self, sourcefile, objectfile, dependinfo, flags, opt)
 
     -- ensure the object directory
     os.mkdir(path.directory(objectfile))
@@ -421,7 +423,7 @@ function compile(self, sourcefile, objectfile, dependinfo, flags)
             function (ok, warnings)
 
                 -- print some warnings
-                if warnings and #warnings > 0 and (option.get("verbose") or option.get("warning") or global.get("build_warning")) then
+                if warnings and #warnings > 0 and policy.build_warnings(opt) then
                     if progress.showing_without_scroll() then
                         print("")
                     end

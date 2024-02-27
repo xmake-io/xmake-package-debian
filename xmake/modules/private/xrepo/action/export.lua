@@ -39,7 +39,7 @@ function menu_options()
                                        values = {"release", "debug"}         },
         {'f', "configs",    "kv", nil, "Set the given extra package configs.",
                                        "e.g.",
-                                       "    - xrepo export -f \"vs_runtime='MD'\" zlib",
+                                       "    - xrepo export -f \"runtimes='MD'\" zlib",
                                        "    - xrepo export -f \"regex=true,thread=true\" boost"},
         {},
         {nil, "includes",   "kv", nil, "Includes extra lua configuration files."},
@@ -104,7 +104,7 @@ function _export_packages(packages)
     if not os.isdir(workdir) then
         os.mkdir(workdir)
         os.cd(workdir)
-        os.vrunv("xmake", {"create", "-P", "."})
+        os.vrunv(os.programfile(), {"create", "-P", "."})
     else
         os.cd(workdir)
     end
@@ -143,7 +143,7 @@ function _export_packages(packages)
     if #rcfiles > 0 then
         envs.XMAKE_RCFILES = path.joinenv(rcfiles)
     end
-    os.vrunv("xmake", config_argv, {envs = envs})
+    os.vrunv(os.programfile(), config_argv, {envs = envs})
 
     -- do export
     local require_argv = {"require", "--export"}
@@ -191,7 +191,7 @@ function _export_packages(packages)
         end
         table.join2(require_argv, packages)
     end
-    os.vexecv("xmake", require_argv, {envs = envs})
+    os.vexecv(os.programfile(), require_argv, {envs = envs})
 end
 
 -- export packages in current project

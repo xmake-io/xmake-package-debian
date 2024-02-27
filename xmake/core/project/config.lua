@@ -28,6 +28,7 @@ local path          = require("base/path")
 local table         = require("base/table")
 local utils         = require("base/utils")
 local option        = require("base/option")
+local is_cross      = require("base/private/is_cross")
 
 -- always use workingdir?
 --
@@ -75,25 +76,36 @@ end
 -- @param opt   the argument options, e.g. {readonly = false, force = false}
 --
 function config.set(name, value, opt)
-
-    -- check
-    assert(name)
-
-    -- init options
     opt = opt or {}
-
-    -- check readonly
+    assert(name)
     assert(opt.force or not config.readonly(name), "cannot set readonly config: " .. name)
 
-    -- set it
     config._CONFIGS = config._CONFIGS or {}
     config._CONFIGS[name] = value
-
-    -- mark as readonly
     if opt.readonly then
         config._MODES = config._MODES or {}
         config._MODES["__readonly_" .. name] = true
     end
+end
+
+-- get the current platform
+function config.plat()
+    return config.get("plat")
+end
+
+-- get the current architecture
+function config.arch()
+    return config.get("arch")
+end
+
+-- get the current mode
+function config.mode()
+    return config.get("mode")
+end
+
+-- get the current host
+function config.host()
+    return config.get("host")
 end
 
 -- get all options
@@ -204,6 +216,10 @@ function config.load(filepath, opt)
 end
 
 -- save the project configuration
+--
+-- @note we pass only_changed to avoid frequent changes to the file's mtime,
+-- because some plugins(vscode, compile_commands.autoupdate) depend on it's mtime.
+--
 function config.save(filepath, opt)
     opt = opt or {}
     filepath = filepath or config.filepath()
@@ -214,9 +230,9 @@ function config.save(filepath, opt)
                 configs[name] = value
             end
         end
-        return io.save(filepath, configs, {orderkeys = true})
+        return io.save(filepath, configs, {orderkeys = true, only_changed = true})
     else
-        return io.save(filepath, config.options(), {orderkeys = true})
+        return io.save(filepath, config.options(), {orderkeys = true, only_changed = true})
     end
 end
 
@@ -255,6 +271,11 @@ end
 -- the current architecture is belong to the given architectures?
 function config.is_arch(...)
     return config.is_value("arch", ...)
+end
+
+-- is cross-compilation?
+function config.is_cross()
+    return is_cross(config.plat(), config.arch())
 end
 
 -- the current config is belong to the given config values?

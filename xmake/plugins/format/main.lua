@@ -20,11 +20,91 @@
 
 -- imports
 import("core.base.option")
+import("core.base.hashset")
 import("core.project.config")
 import("core.project.project")
 import("lib.detect.find_tool")
 import("private.action.require.impl.packagenv")
 import("private.action.require.impl.install_packages")
+
+-- match source files
+function _match_sourcefiles(sourcefile, filepatterns)
+    for _, filepattern in ipairs(filepatterns) do
+        if sourcefile:match(filepattern.pattern) == sourcefile then
+            if filepattern.excludes then
+                if filepattern.rootdir and sourcefile:startswith(filepattern.rootdir) then
+                    sourcefile = sourcefile:sub(#filepattern.rootdir + 2)
+                end
+                for _, exclude in ipairs(filepattern.excludes) do
+                    if sourcefile:match(exclude) == sourcefile then
+                        return false
+                    end
+                end
+            end
+            return true
+        end
+    end
+end
+
+-- convert all sourcefiles to lua pattern
+function _get_file_patterns(sourcefiles)
+    local patterns = {}
+    for _, sourcefile in ipairs(path.splitenv(sourcefiles)) do
+
+        -- get the excludes
+        local pattern  = sourcefile:trim()
+        local excludes = pattern:match("|.*$")
+        if excludes then excludes = excludes:split("|", {plain = true}) end
+
+        -- translate excludes
+        if excludes then
+            local _excludes = {}
+            for _, exclude in ipairs(excludes) do
+                exclude = path.translate(exclude)
+                exclude = path.pattern(exclude)
+                table.insert(_excludes, exclude)
+            end
+            excludes = _excludes
+        end
+
+        -- translate path and remove some repeat separators
+        pattern = path.translate((pattern:gsub("|.*$", "")))
+
+        -- remove "./" or '.\\' prefix
+        if pattern:sub(1, 2):find('%.[/\\]') then
+            pattern = pattern:sub(3)
+        end
+
+        -- get the root directory
+        local rootdir = pattern
+        local startpos = pattern:find("*", 1, true)
+        if startpos then
+            rootdir = rootdir:sub(1, startpos - 1)
+        end
+        rootdir = path.directory(rootdir)
+
+        -- convert to lua path pattern
+        pattern = path.pattern(pattern)
+        table.insert(patterns, {pattern = pattern, excludes = excludes, rootdir = rootdir})
+    end
+    return patterns
+end
+
+-- get all the targets that match the group or targetname
+function _get_targets(targetname, group_pattern)
+    local targets = {}
+    if targetname then
+        table.insert(targets, project.target(targetname))
+    else
+        for _, target in pairs(project.targets()) do
+            local group = target:get("group")
+            if (target:is_default() and not group_pattern) or option.get("all") or (group_pattern and group and group:match(group_pattern)) then
+                table.insert(targets, target)
+            end
+        end
+    end
+    return targets
+end
 
 -- main
 function main()
@@ -71,23 +151,34 @@ function main()
     -- inplace flag
     table.insert(argv, "-i")
 
-    -- set file to format
+    local targetname
+    local group_pattern = option.get("group")
+    if group_pattern then
+        group_pattern = "^" .. path.pattern(group_pattern) .. "$"
+    else
+        targetname = option.get("target")
+    end
+
+    local targets = _get_targets(targetname, group_pattern)
     if option.get("files") then
-        local files = path.splitenv(option.get("files"))
-        for _, f in ipairs(files) do
-            local p = path.join(projectdir, f)
-            for _, filepath in ipairs(os.files(p)) do
-                table.insert(argv, filepath)
+        local filepatterns = _get_file_patterns(option.get("files"))
+        for _, target in ipairs(targets) do
+            for _, source in ipairs(target:sourcefiles()) do
+                if _match_sourcefiles(source, filepatterns) then
+                    table.insert(argv, path.join(projectdir, source))
+                end
+            end
+            for _, header in ipairs(target:headerfiles()) do
+                if _match_sourcefiles(header, filepatterns) then
+                    table.insert(argv, path.join(projectdir, header))
+                end
             end
         end
     else
-        -- format all source files of all targets
-        for targetname, target in pairs(project.targets()) do
-            -- source files
+        for _, target in ipairs(targets) do
             for _, source in ipairs(target:sourcefiles()) do
                 table.insert(argv, path.join(projectdir, source))
             end
-            -- header files
             for _, header in ipairs(target:headerfiles()) do
                 table.insert(argv, path.join(projectdir, header))
             end

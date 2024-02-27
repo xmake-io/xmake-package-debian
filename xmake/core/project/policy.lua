@@ -48,8 +48,10 @@ function policy.policies()
             ["build.ccache"]                      = {description = "Enable C/C++ build cache.", type = "boolean"},
             -- Use global storage if build.ccache is enabled
             ["build.ccache.global_storage"]       = {description = "Use global storge if build.ccache is enabled.", type = "boolean"},
-            -- Enable build warning output, it's disabled by default and we need `xmake -w/-vD` to look at it.
-            ["build.warning"]                     = {description = "Enable build warning output.", type = "boolean"},
+            -- Always update configfiles when building
+            ["build.always_update_configfiles"]   = {description = "Always update configfiles when building.", type = "boolean"},
+            -- Enable build warning output, it's enabled by default.
+            ["build.warning"]                     = {description = "Enable build warning output.", default = true, type = "boolean"},
             -- Enable LTO linker-time optimization for c/c++ building.
             ["build.optimization.lto"]            = {description = "Enable LTO linker-time optimization for c/c++ building.", type = "boolean"},
             -- Enable address sanitizer for c/c++ building.
@@ -64,8 +66,12 @@ function policy.policies()
             ["build.sanitizer.undefined"]         = {description = "Enable undefined sanitizer for c/c++ building.", type = "boolean"},
             -- Enable C++ modules for C++ building, even if no .mpp is involved in the compilation
             ["build.c++.modules"]                 = {description = "Enable C++ modules for C++ building.", type = "boolean"},
-            -- Enable clang std modulemap
-            ["build.c++.clang.stdmodules"]        = {description = "Enable clang std modulemap.", default = false, type = "boolean"},
+            -- Enable std module
+            ["build.c++.modules.std"]             = {description = "Enable std modules.", default = true, type = "boolean"},
+            -- Try to reuse compiled module bmi file if targets flags permit it
+            ["build.c++.modules.tryreuse"]        = {description = "Try to reuse compiled module if possible.", default = true, type = "boolean"},
+            -- Enable module taking defines acbount for bmi reuse discrimination
+            ["build.c++.modules.tryreuse.discriminate_on_defines"] = {description = "Enable defines module reuse discrimination.", default = false, type = "boolean"},
             -- Force C++ modules fallback dependency scanner for clang
             ["build.c++.clang.fallbackscanner"]   = {description = "Force clang fallback module dependency scanner.", default = false, type = "boolean"},
             -- Force C++ modules fallback dependency scanner for msvc

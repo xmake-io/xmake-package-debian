@@ -352,24 +352,28 @@ function _get_configs_for_windows(package, configs, opt)
     -- we maybe need patch `cmake_policy(SET CMP0091 NEW)` to enable this argument for some packages
     -- @see https://cmake.org/cmake/help/latest/policy/CMP0091.html#policy:CMP0091
     -- https://github.com/xmake-io/xmake-repo/pull/303
-    local vs_runtime = package:config("vs_runtime")
-    if vs_runtime == "MT" then
+    local runtime
+    if package:has_runtime("MT") then
         table.insert(configs, "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded")
-    elseif vs_runtime == "MTd" then
+        runtime = "MT"
+    elseif package:has_runtime("MTd") then
         table.insert(configs, "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDebug")
-    elseif vs_runtime == "MD" then
+        runtime = "MTd"
+    elseif package:has_runtime("MD") then
         table.insert(configs, "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL")
-    elseif vs_runtime == "MDd" then
+        runtime = "MD"
+    elseif package:has_runtime("MDd") then
         table.insert(configs, "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDebugDLL")
+        runtime = "MDd"
     end
-    if vs_runtime then
+    if runtime then
         -- CMake default MSVC flags as of 3.21.2
         local default_debug_flags = "/Zi /Ob0 /Od /RTC1"
         local default_release_flags = "/O2 /Ob2 /DNDEBUG"
-        table.insert(configs, '-DCMAKE_CXX_FLAGS_DEBUG=/' .. vs_runtime .. ' ' .. default_debug_flags)
-        table.insert(configs, '-DCMAKE_CXX_FLAGS_RELEASE=/' .. vs_runtime .. ' ' .. default_release_flags)
-        table.insert(configs, '-DCMAKE_C_FLAGS_DEBUG=/' .. vs_runtime .. ' ' .. default_debug_flags)
-        table.insert(configs, '-DCMAKE_C_FLAGS_RELEASE=/' .. vs_runtime .. ' ' .. default_release_flags)
+        table.insert(configs, '-DCMAKE_CXX_FLAGS_DEBUG=/' .. runtime .. ' ' .. default_debug_flags)
+        table.insert(configs, '-DCMAKE_CXX_FLAGS_RELEASE=/' .. runtime .. ' ' .. default_release_flags)
+        table.insert(configs, '-DCMAKE_C_FLAGS_DEBUG=/' .. runtime .. ' ' .. default_debug_flags)
+        table.insert(configs, '-DCMAKE_C_FLAGS_RELEASE=/' .. runtime .. ' ' .. default_release_flags)
     end
     if not opt._configs_str:find("CMAKE_COMPILE_PDB_OUTPUT_DIRECTORY") then
         table.insert(configs, "-DCMAKE_COMPILE_PDB_OUTPUT_DIRECTORY=pdb")
@@ -429,6 +433,7 @@ function _get_configs_for_appleos(package, configs, opt)
     elseif package:is_plat("macosx") then
         envs.CMAKE_SYSTEM_NAME = "Darwin"
     end
+    envs.CMAKE_OSX_ARCHITECTURES = package:arch()
     envs.CMAKE_FIND_ROOT_PATH_MODE_LIBRARY   = "BOTH"
     envs.CMAKE_FIND_ROOT_PATH_MODE_INCLUDE   = "BOTH"
     envs.CMAKE_FIND_ROOT_PATH_MODE_FRAMEWORK = "BOTH"
@@ -558,9 +563,9 @@ function _get_configs_for_cross(package, configs, opt)
     envs.CMAKE_FIND_ROOT_PATH_MODE_PROGRAM = "NEVER"
     -- avoid add -isysroot on macOS
     envs.CMAKE_OSX_SYSROOT = ""
-    -- Avoid cmake to add the flags -search_paths_first and -headerpad_max_install_names on macOS
+    -- avoid cmake to add the flags -search_paths_first and -headerpad_max_install_names on macOS
     envs.HAVE_FLAG_SEARCH_PATHS_FIRST = "0"
-    -- Avoids finding host include/library path
+    -- avoids finding host include/library path
     envs.CMAKE_FIND_USE_CMAKE_SYSTEM_PATH = "0"
     envs.CMAKE_FIND_USE_INSTALL_PREFIX = "0"
     _insert_configs_from_envs(configs, envs, opt)

@@ -38,7 +38,7 @@ function menu_options()
                                        values = {"release", "debug"}         },
         {'f', "configs",    "kv", nil, "Set the given extra package configs.",
                                        "e.g.",
-                                       "    - xrepo fetch --configs=\"vs_runtime='MD'\" zlib",
+                                       "    - xrepo fetch --configs=\"runtimes='MD'\" zlib",
                                        "    - xrepo fetch --configs=\"regex=true,thread=true\" boost"},
         {nil, "system",     "k", "false", "Only fetch package on current system."},
         {},
@@ -113,7 +113,7 @@ function _fetch_packages(packages)
     if not os.isdir(workdir) then
         os.mkdir(workdir)
         os.cd(workdir)
-        os.vrunv("xmake", {"create", "-P", "."})
+        os.vrunv(os.programfile(), {"create", "-P", "."})
     else
         os.cd(workdir)
     end
@@ -152,7 +152,7 @@ function _fetch_packages(packages)
     if #rcfiles > 0 then
         envs.XMAKE_RCFILES = path.joinenv(rcfiles)
     end
-    os.vrunv("xmake", config_argv, {envs = envs})
+    os.vrunv(os.programfile(), config_argv, {envs = envs})
 
     -- do fetch
     local require_argv = {"require", "--fetch"}
@@ -210,7 +210,7 @@ function _fetch_packages(packages)
         end
         table.join2(require_argv, packages)
     end
-    os.vexecv("xmake", require_argv, {envs = envs})
+    os.vexecv(os.programfile(), require_argv, {envs = envs})
 end
 
 -- main entry

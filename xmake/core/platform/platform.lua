@@ -162,7 +162,8 @@ function _instance:toolchains(opt)
             -- get the given toolchain
             local toolchain_given = config.get("toolchain")
             if toolchain_given then
-                local toolchain_inst, errors = toolchain.load(toolchain_given, {plat = self:name(), arch = self:arch()})
+                local toolchain_inst, errors = toolchain.load(toolchain_given, {
+                    plat = self:name(), arch = self:arch()})
                 -- attempt to load toolchain from project
                 if not toolchain_inst and platform._project() then
                     toolchain_inst = platform._project().toolchain(toolchain_given)
@@ -181,7 +182,8 @@ function _instance:toolchains(opt)
         end
         if names then
             for _, name in ipairs(table.wrap(names)) do
-                local toolchain_inst, errors = toolchain.load(name, {plat = self:name(), arch = self:arch()})
+                local toolchain_inst, errors = toolchain.load(name, {
+                    plat = self:name(), arch = self:arch()})
                 -- attempt to load toolchain from project
                 if not toolchain_inst and platform._project() then
                     toolchain_inst = platform._project().toolchain(name)
@@ -550,8 +552,8 @@ function platform.archs(plat, arch)
     return platform.get("archs", plat, arch)
 end
 
--- get the format of the given target kind for platform
-function platform.format(targetkind, plat, arch)
+-- get the format of the given kind for platform
+function platform.format(kind, plat, arch)
 
     -- get platform instance
     local instance, errors = platform.load(plat, arch)
@@ -562,7 +564,7 @@ function platform.format(targetkind, plat, arch)
     -- get formats
     local formats = instance:formats()
     if formats then
-        return formats[targetkind]
+        return formats[kind]
     end
 end
 

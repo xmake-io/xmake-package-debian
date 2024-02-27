@@ -77,10 +77,10 @@ function _get_configs_for_windows(package, configs, opt)
             table.insert(configs, "--" .. name .. "=" .. tostring(value))
         end
     end
-    -- pass vs_runtime from package configs
-    local vs_runtime = package:config("vs_runtime")
-    if vs_runtime then
-        table.insert(configs, "--vs_runtime=" .. vs_runtime)
+    -- pass runtimes from package configs
+    local runtimes = package:config("runtimes")
+    if runtimes then
+        table.insert(configs, "--runtimes=" .. runtimes)
     end
     _get_configs_for_qt(package, configs, opt)
     _get_configs_for_vcpkg(package, configs, opt)
@@ -109,6 +109,10 @@ function _get_configs_for_appleos(package, configs, opt)
     if appledev then
         table.insert(configs, "--appledev=" .. appledev)
     end
+    local runtimes = package:config("runtimes")
+    if runtimes then
+        table.insert(configs, "--runtimes=" .. runtimes)
+    end
     _get_configs_for_qt(package, configs, opt)
     _get_configs_for_vcpkg(package, configs, opt)
 end
@@ -135,6 +139,10 @@ function _get_configs_for_mingw(package, configs, opt)
             table.insert(configs, "--" .. name .. "=" .. tostring(value))
         end
     end
+    local runtimes = package:config("runtimes")
+    if runtimes then
+        table.insert(configs, "--runtimes=" .. runtimes)
+    end
     _get_configs_for_qt(package, configs, opt)
     _get_configs_for_vcpkg(package, configs, opt)
 end
@@ -151,6 +159,10 @@ function _get_configs_for_generic(package, configs, opt)
             table.insert(configs, "--" .. name .. "=" .. tostring(value))
         end
     end
+    local runtimes = package:config("runtimes")
+    if runtimes then
+        table.insert(configs, "--runtimes=" .. runtimes)
+    end
     _get_configs_for_qt(package, configs, opt)
     _get_configs_for_vcpkg(package, configs, opt)
 end
@@ -164,6 +176,10 @@ function _get_configs_for_host_toolchain(package, configs, opt)
     local sdkdir = _get_config_from_toolchains(package, "sdkdir") or get_config("sdk")
     if sdkdir then
         table.insert(configs, "--sdk=" .. sdkdir)
+    end
+    local runtimes = package:config("runtimes")
+    if runtimes then
+        table.insert(configs, "--runtimes=" .. runtimes)
     end
     local toolchain_name = get_config("toolchain")
     if toolchain_name then
@@ -186,6 +202,10 @@ function _get_configs_for_cross(package, configs, opt)
     local sdkdir = _get_config_from_toolchains(package, "sdkdir") or get_config("sdk")
     if sdkdir then
         table.insert(configs, "--sdk=" .. sdkdir)
+    end
+    local runtimes = package:config("runtimes")
+    if runtimes then
+        table.insert(configs, "--runtimes=" .. runtimes)
     end
     local toolchain_name = get_config("toolchain")
     if toolchain_name then
@@ -467,7 +487,7 @@ function install(package, configs, opt)
         local repo_argv = {"repo"}
         _set_builtin_argv(package, repo_argv)
         table.join2(repo_argv, {"--add", repo:name(), repo:directory()})
-        os.vrunv("xmake", repo_argv, {envs = envs})
+        os.vrunv(os.programfile(), repo_argv, {envs = envs})
     end
 
     -- pass configurations
@@ -488,7 +508,7 @@ function install(package, configs, opt)
     end
 
     -- do configure
-    os.vrunv("xmake", argv, {envs = envs})
+    os.vrunv(os.programfile(), argv, {envs = envs})
 
     -- do build
     argv = {"build"}
@@ -496,7 +516,11 @@ function install(package, configs, opt)
     if opt.target then
         table.insert(argv, opt.target)
     end
-    os.vrunv("xmake", argv, {envs = envs})
+    local njob = opt.jobs or option.get("jobs")
+    if njob then
+        table.insert(argv, "--jobs=" .. njob)
+    end
+    os.vrunv(os.programfile(), argv, {envs = envs})
 
     -- do install
     argv = {"install", "-y", "--nopkgs", "-o", package:installdir()}
@@ -504,5 +528,5 @@ function install(package, configs, opt)
     if opt.target then
         table.insert(argv, opt.target)
     end
-    os.vrunv("xmake", argv, {envs = envs})
+    os.vrunv(os.programfile(), argv, {envs = envs})
 end

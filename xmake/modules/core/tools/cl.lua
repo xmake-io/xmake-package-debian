@@ -184,10 +184,16 @@ function nf_optimize(self, level)
     return maps[level]
 end
 
--- make vs runtime flag
-function nf_runtime(self, vs_runtime)
-    if vs_runtime then
-        return "-" .. vs_runtime
+-- make the runtime flag
+function nf_runtime(self, runtime)
+    if runtime then
+        local maps = {
+            MT = "-MT",
+            MD = "-MD",
+            MTd = "-MTd",
+            MDd = "-MDd"
+        }
+        return maps[runtime]
     end
 end
 
@@ -386,7 +392,7 @@ function nf_pcheader(self, pcheaderfile, opt)
         if objectfiles then
             table.insert(objectfiles, target:pcoutputfile("c") .. ".obj")
         end
-        return {"-Yu" .. path.filename(pcheaderfile), "-FI" .. path.filename(pcheaderfile), "-Fp" .. target:pcoutputfile("c")}
+        return {"-Yu" .. path.absolute(pcheaderfile), "-FI" .. path.absolute(pcheaderfile), "-Fp" .. target:pcoutputfile("c")}
     end
 end
 
@@ -398,7 +404,7 @@ function nf_pcxxheader(self, pcheaderfile, opt)
         if objectfiles then
             table.insert(objectfiles, target:pcoutputfile("cxx") .. ".obj")
         end
-        return {"-Yu" .. path.filename(pcheaderfile), "-FI" .. path.filename(pcheaderfile), "-Fp" .. target:pcoutputfile("cxx")}
+        return {"-Yu" .. path.absolute(pcheaderfile), "-FI" .. path.absolute(pcheaderfile), "-Fp" .. target:pcoutputfile("cxx")}
     end
 end
 
@@ -714,7 +720,7 @@ function compile(self, sourcefile, objectfile, dependinfo, flags, opt)
             function (ok, outdata, errdata)
 
                 -- show warnings?
-                if ok and policy.build_warnings() then
+                if ok and policy.build_warnings(opt) then
                     local output = outdata or ""
                     if #output:trim() == 0 then
                         output = errdata or ""
