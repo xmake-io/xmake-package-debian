@@ -1,3 +1,9 @@
+xmake (2.8.7+ds-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+
+ -- Lance Lin <lq27267@gmail.com>  Tue, 27 Feb 2024 20:19:29 +0700
+
 xmake (2.8.6+ds-3) unstable; urgency=medium
 
   * d/rules: Still install license.lua files.
