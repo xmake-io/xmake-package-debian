@@ -34,6 +34,8 @@ local option         = require("base/option")
 local hashset        = require("base/hashset")
 local scopeinfo      = require("base/scopeinfo")
 local interpreter    = require("base/interpreter")
+local select_script  = require("base/private/select_script")
+local is_cross       = require("base/private/is_cross")
 local memcache       = require("cache/memcache")
 local toolchain      = require("tool/toolchain")
 local compiler       = require("tool/compiler")
@@ -307,7 +309,7 @@ end
 
 -- set artifacts info
 function _instance:artifacts_set(artifacts_info)
-    local versions = self:get("versions")
+    local versions = self:_versions_list()
     if versions then
         -- backup previous package configuration
         self._ARTIFACTS_BACKUP = {
@@ -467,7 +469,7 @@ end
 
 -- get hash of the source package for the url_alias@version_str
 function _instance:sourcehash(url_alias)
-    local versions    = self:get("versions")
+    local versions    = self:_versions_list()
     local version_str = self:version_str()
     if versions and version_str then
         local sourcehash = nil
@@ -683,27 +685,7 @@ end
 
 -- is cross-compilation?
 function _instance:is_cross()
-    if os.host() == "windows" then
-        local host_arch = os.arch()
-        if self:is_plat("windows") then
-            -- maybe cross-compilation for arm64 on x86/x64
-            if (host_arch == "x86" or host_arch == "x64") and self:is_arch("arm64") then
-                return true
-            -- maybe cross-compilation for x86/64 on arm64
-            elseif host_arch == "arm64" and not self:is_arch("arm64") then
-                return true
-            end
-            return false
-        elseif self:is_plat("mingw") then
-            return false
-        end
-    end
-    if not self:is_plat(os.host()) and not self:is_plat(os.subhost()) then
-        return true
-    end
-    if not self:is_arch(os.arch()) and not self:is_arch(os.subarch()) then
-        return true
-    end
+    return is_cross(self:plat(), self:arch())
 end
 
 -- get the filelock of the whole package directory
@@ -1130,9 +1112,38 @@ function _instance:build_envs(lazy_loading)
     return build_envs
 end
 
+-- get runtimes
+function _instance:runtimes()
+    local runtimes = self:_memcache():get("runtimes")
+    if runtimes == nil then
+        runtimes = self:config("runtimes")
+        if runtimes then
+            local runtimes_current = runtimes:split(",", {plain = true})
+            runtimes = table.unwrap(runtimes_current)
+        end
+        runtimes = runtimes or false
+        self:_memcache():set("runtimes", runtimes)
+    end
+    return runtimes or nil
+end
+
+-- has the given runtime for the current toolchains?
+function _instance:has_runtime(...)
+    local runtimes_set = self:_memcache():get("runtimes_set")
+    if runtimes_set == nil then
+        runtimes_set = hashset.from(table.wrap(self:runtimes()))
+        self:_memcache():set("runtimes_set", runtimes_set)
+    end
+    for _, v in ipairs(table.pack(...)) do
+        if runtimes_set:has(v) then
+            return true
+        end
+    end
+end
+
 -- get the given toolchain
 function _instance:toolchain(name)
-    local toolchains_map = self._TOOLCHAINS_MAP
+    local toolchains_map = self:_memcache():get("toolchains_map")
     if toolchains_map == nil then
         toolchains_map = {}
         local toolchains = self:toolchains()
@@ -1141,7 +1152,7 @@ function _instance:toolchain(name)
                 toolchains_map[toolchain_inst:name()] = toolchain_inst
             end
         end
-        self._TOOLCHAINS_MAP = toolchains_map
+        self:_memcache():set("toolchains_map", toolchains_map)
     end
     return toolchains_map[name]
 end
@@ -1250,11 +1261,40 @@ function _instance:originfile_set(filepath)
     self._ORIGINFILE = filepath
 end
 
+-- get versions list
+function _instance:_versions_list()
+    if self._VERSIONS_LIST == nil then
+        local versions = table.wrap(self:get("versions"))
+        local versionfiles = self:get("versionfiles")
+        if versionfiles then
+            utils.dump(versionfiles)
+            for _, versionfile in ipairs(table.wrap(versionfiles)) do
+                if not os.isfile(versionfile) then
+                    versionfile = path.join(self:scriptdir(), versionfile)
+                end
+                if os.isfile(versionfile) then
+                    local list = io.readfile(versionfile)
+                    for _, line in ipairs(list:split("\n")) do
+                        local splitinfo = line:split("%s+")
+                        if #splitinfo == 2 then
+                            local version = splitinfo[1]
+                            local shasum = splitinfo[2]
+                            versions[version] = shasum
+                        end
+                    end
+                end
+            end
+        end
+        self._VERSIONS_LIST = versions
+    end
+    return self._VERSIONS_LIST
+end
+
 -- get versions
 function _instance:versions()
     if self._VERSIONS == nil then
         local versions = {}
-        for version, _ in pairs(table.wrap(self:get("versions"))) do
+        for version, _ in pairs(self:_versions_list()) do
             -- remove the url alias prefix if exists
             local pos = version:find(':', 1, true)
             if pos then
@@ -1356,12 +1396,31 @@ function _instance:displayname_set(displayname)
     self._DISPLAYNAME = displayname
 end
 
+-- invalidate configs
+function _instance:_invalidate_configs()
+    self._CONFIGS = nil
+    self._CONFIGS_FOR_BUILDHASH = nil
+end
+
 -- get the given configuration value of package
 function _instance:config(name)
     local value
     local configs = self:configs()
     if configs then
         value = configs[name]
+        -- vs_runtime is deprecated now
+        if name == "vs_runtime" then
+            local runtimes = configs.runtimes
+            if runtimes then
+                for _, item in ipairs(runtimes:split(",")) do
+                    if item:startswith("MT") or item:startswith("MD") then
+                        value = item
+                        break
+                    end
+                end
+            end
+            utils.warning("please use package:runtimes() or package:has_runtime() instead of package:config(\"vs_runtime\")")
+        end
     end
     return value
 end
@@ -1383,10 +1442,15 @@ function _instance:configs()
             configs = {}
             local requireinfo = self:requireinfo()
             local configs_required = requireinfo and requireinfo.configs or {}
+            local configs_overrided = requireinfo and requireinfo.configs_overrided or {}
             for _, name in ipairs(table.wrap(configs_defined)) do
-                local value = configs_required[name]
+                local value = configs_overrided[name] or configs_required[name]
                 if value == nil then
                     value = self:extraconf("configs", name, "default")
+                    -- support for the deprecated vs_runtime in add_configs
+                    if name == "runtimes" and value == nil then
+                        value = self:extraconf("configs", "vs_runtime", "default")
+                    end
                 end
                 configs[name] = value
             end
@@ -1418,12 +1482,17 @@ function _instance:_configs_for_buildhash()
             configs = {}
             local requireinfo = self:requireinfo()
             local configs_required = requireinfo and requireinfo.configs or {}
+            local configs_overrided = requireinfo and requireinfo.configs_overrided or {}
             local ignored_configs_for_buildhash = hashset.from(requireinfo and requireinfo.ignored_configs_for_buildhash or {})
             for _, name in ipairs(table.wrap(configs_defined)) do
                 if not ignored_configs_for_buildhash:has(name) then
-                    local value = configs_required[name]
+                    local value = configs_overrided[name] or configs_required[name]
                     if value == nil then
                         value = self:extraconf("configs", name, "default")
+                        -- support for the deprecated vs_runtime in add_configs
+                        if name == "runtimes" and value == nil then
+                            value = self:extraconf("configs", "vs_runtime", "default")
+                        end
                     end
                     configs[name] = value
                 end
@@ -1436,10 +1505,19 @@ function _instance:_configs_for_buildhash()
     return configs and configs or nil
 end
 
+-- compute the build hash
+function _instance:_compute_buildhash()
+    self._BUILDHASH_PREPRARED = true
+    self:buildhash()
+end
+
 -- get the build hash
 function _instance:buildhash()
     local buildhash = self._BUILDHASH
     if buildhash == nil then
+        if not self._BUILDHASH_PREPRARED then
+            os.raise("package:buildhash() must be called after loading package")
+        end
         local function _get_buildhash(configs, opt)
             opt = opt or {}
             local str = self:plat() .. self:arch()
@@ -1448,6 +1526,15 @@ function _instance:buildhash()
                 str = str .. label
             end
             if configs then
+
+                -- with old vs_runtime configs
+                -- https://github.com/xmake-io/xmake/issues/4477
+                if opt.vs_runtime then
+                    configs = table.clone(configs)
+                    configs.vs_runtime = configs.runtimes
+                    configs.runtimes = nil
+                end
+
                 -- since luajit v2.1, the key order of the table is random and undefined.
                 -- We cannot directly deserialize the table, so the result may be different each time
                 local configs_order = {}
@@ -1525,6 +1612,16 @@ function _instance:buildhash()
             end
         end
 
+        -- we need to be compatible with the previous xmake version
+        -- with deprecated vs_runtime (< 2.8.7)
+        -- @see https://github.com/xmake-io/xmake/issues/4477
+        if not buildhash then
+            buildhash = _get_buildhash(self:_configs_for_buildhash(), {vs_runtime = true})
+            if not os.isdir(_get_installdir(buildhash)) then
+                buildhash = nil
+            end
+        end
+
         -- get build hash for current version
         if not buildhash then
             buildhash = _get_buildhash(self:_configs_for_buildhash())
@@ -1547,48 +1644,7 @@ function _instance:script(name, generic)
 
     -- get script
     local script = self:get(name)
-    local result = nil
-    if type(script) == "function" then
-        result = script
-    elseif type(script) == "table" then
-
-        -- get plat and arch
-        local plat = self:plat() or ""
-        local arch = self:arch() or ""
-
-        -- match pattern
-        --
-        -- `@linux`
-        -- `@linux|x86_64`
-        -- `@macosx,linux`
-        -- `android@macosx,linux`
-        -- `android|armeabi-v7a@macosx,linux`
-        -- `android|armeabi-v7a@macosx,linux|x86_64`
-        -- `android|armeabi-v7a@linux|x86_64`
-        --
-        for _pattern, _script in pairs(script) do
-            local hosts = {}
-            local hosts_spec = false
-            _pattern = _pattern:gsub("@(.+)", function (v)
-                for _, host in ipairs(v:split(',')) do
-                    hosts[host] = true
-                    hosts_spec = true
-                end
-                return ""
-            end)
-            if not _pattern:startswith("__") and (not hosts_spec or hosts[os.subhost() .. '|' .. os.subarch()] or hosts[os.subhost()])
-            and (_pattern:trim() == "" or (plat .. '|' .. arch):find('^' .. _pattern .. '$') or plat:find('^' .. _pattern .. '$')) then
-                result = _script
-                break
-            end
-        end
-
-        -- get generic script
-        result = result or script["__generic__"] or generic
-    end
-
-    -- only generic script
-    result = result or generic
+    local result = select_script(script, {plat = self:plat(), arch = self:arch()}) or generic
 
     -- imports some modules first
     if result and result ~= generic then
@@ -1746,6 +1802,13 @@ function _instance:find_package(name, opt)
     if system == nil and not name:startswith("xmake::") then
         system = true -- find system package by default
     end
+    local configs = table.clone(self:configs()) or {}
+    if opt.configs then
+        table.join2(configs, opt.configs)
+    end
+    if configs.runtimes then
+        configs.runtimes = self:runtimes()
+    end
     return self._find_package(name, {
                               force = opt.force,
                               installdir = self:installdir({readonly = true}),
@@ -1754,14 +1817,19 @@ function _instance:find_package(name, opt)
                               mode = self:mode(),
                               plat = self:plat(),
                               arch = self:arch(),
-                              configs = table.join(self:configs(), opt.configs),
+                              configs = configs,
                               components = self:components_orderlist(),
                               components_extsources = opt.components_extsources,
                               buildhash = self:buildhash(), -- for xmake package or 3rd package manager, e.g. go:: ..
                               cachekey = opt.cachekey or "fetch_package_system",
                               external = opt.external,
-                              includes = opt.includes, -- system/find_package need it
-                              system = system})
+                              system = system,
+                              -- the following options is only for system::find_package
+                              sourcekind = opt.sourcekind,
+                              package = self,
+                              funcs = opt.funcs,
+                              snippets = opt.snippets,
+                              includes = opt.includes})
 end
 
 -- fetch the local package info
@@ -2178,21 +2246,21 @@ function _instance:_generate_build_configs(configs, opt)
     configs = table.join(self:fetch_librarydeps(), configs)
     if self:is_plat("windows") then
         local ld = self:build_getenv("ld")
-        local vs_runtime = self:config("vs_runtime")
-        -- since we are ignoring the vs_runtime of the headeronly library,
-        -- we can only get the vs_runtime from the dependency library to detect the link.
-        if self:is_headeronly() and not vs_runtime and self:librarydeps() then
+        local runtimes = self:runtimes()
+        -- since we are ignoring the runtimes of the headeronly library,
+        -- we can only get the runtimes from the dependency library to detect the link.
+        if self:is_headeronly() and not runtimes and self:librarydeps() then
             for _, dep in ipairs(self:librarydeps()) do
-                if dep:is_plat("windows") and dep:config("vs_runtime") then
-                    vs_runtime = dep:config("vs_runtime")
+                if dep:is_plat("windows") and dep:runtimes() then
+                    runtimes = dep:runtimes()
                     break
                 end
             end
         end
-        if vs_runtime and ld and path.basename(ld:lower()) == "link" then -- for msvc?
+        if runtimes and ld and path.basename(ld:lower()) == "link" then -- for msvc?
             configs.cxflags = table.wrap(configs.cxflags)
-            table.insert(configs.cxflags, "/" .. vs_runtime)
-            if vs_runtime:startswith("MT") then
+            table.insert(configs.cxflags, "/" .. runtimes)
+            if runtimes:startswith("MT") then
                 configs.ldflags = table.wrap(configs.ldflags)
                 table.insert(configs.ldflags, "-nodefaultlib:msvcrt.lib")
             end
@@ -2558,6 +2626,11 @@ function package.apis()
         ,   "package.add_patches"
         ,   "package.add_resources"
         }
+    ,   paths =
+        {
+            -- package.add_xxx
+            "package.add_versionfiles"
+        }
     ,   dictionary =
         {
             -- package.add_xxx
@@ -2626,7 +2699,8 @@ function package.load_from_system(packagename)
         -- on install script
         local on_install = function (pkg)
             local opt = {}
-            opt.configs         = pkg:configs()
+            local configs       = table.clone(pkg:configs()) or {}
+            opt.configs         = configs
             opt.mode            = pkg:is_debug() and "debug" or "release"
             opt.plat            = pkg:plat()
             opt.arch            = pkg:arch()
@@ -2634,6 +2708,9 @@ function package.load_from_system(packagename)
             opt.buildhash       = pkg:buildhash()
             opt.cachedir        = pkg:cachedir()
             opt.installdir      = pkg:installdir()
+            if configs.runtimes then
+                configs.runtimes = pkg:runtimes()
+            end
             import("package.manager.install_package")(pkg:name(), opt)
         end
 

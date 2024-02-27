@@ -38,7 +38,7 @@ function menu_options()
                                        values = {"release", "debug"}         },
         {'f', "configs",       "kv", nil, "Set the given extra package configs.",
                                        "e.g.",
-                                       "    - xrepo install -f \"vs_runtime='MD'\" zlib",
+                                       "    - xrepo install -f \"runtimes='MD'\" zlib",
                                        "    - xrepo install -f \"regex=true,thread=true\" boost"},
         {'j', "jobs",          "kv", tostring(os.default_njob()),
                                           "Set the number of parallel compilation jobs."},
@@ -143,7 +143,7 @@ function _install_packages(packages)
     if not os.isdir(workdir) then
         os.mkdir(workdir)
         os.cd(workdir)
-        os.vrunv("xmake", {"create", "-P", "."})
+        os.vrunv(os.programfile(), {"create", "-P", "."})
     else
         os.cd(workdir)
     end
@@ -235,7 +235,7 @@ function _install_packages(packages)
     if #rcfiles > 0 then
         envs.XMAKE_RCFILES = path.joinenv(rcfiles)
     end
-    os.vrunv("xmake", config_argv, {envs = envs})
+    os.vrunv(os.programfile(), config_argv, {envs = envs})
 
     -- do install
     local require_argv = {"require"}
@@ -297,7 +297,7 @@ function _install_packages(packages)
         end
         table.join2(require_argv, packages)
     end
-    os.vexecv("xmake", require_argv, {envs = envs})
+    os.vexecv(os.programfile(), require_argv, {envs = envs})
 end
 
 -- main entry

@@ -38,7 +38,7 @@ function menu_options()
                                        values = {"release", "debug"}         },
         {'f', "configs",    "kv", nil, "Set the given extra package configs.",
                                        "e.g.",
-                                       "    - xrepo fetch --configs=\"vs_runtime='MD'\" zlib",
+                                       "    - xrepo fetch --configs=\"runtimes='MD'\" zlib",
                                        "    - xrepo fetch --configs=\"regex=true,thread=true\" boost"},
         {},
         {nil, "packages",   "vs", nil, "The packages list.",
@@ -70,7 +70,7 @@ function _info_packages(packages)
     if not os.isdir(workdir) then
         os.mkdir(workdir)
         os.cd(workdir)
-        os.vrunv("xmake", {"create", "-P", "."})
+        os.vrunv(os.programfile(), {"create", "-P", "."})
     else
         os.cd(workdir)
     end
@@ -98,7 +98,7 @@ function _info_packages(packages)
         table.insert(config_argv, "-k")
         table.insert(config_argv, kind)
     end
-    os.vrunv("xmake", config_argv)
+    os.vrunv(os.programfile(), config_argv)
 
     -- show info
     local require_argv = {"require", "--info"}
@@ -131,7 +131,7 @@ function _info_packages(packages)
         table.insert(require_argv, "--extra=" .. extra_str)
     end
     table.join2(require_argv, packages)
-    os.vexecv("xmake", require_argv)
+    os.vexecv(os.programfile(), require_argv)
 end
 
 -- main entry

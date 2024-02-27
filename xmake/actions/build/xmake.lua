@@ -27,7 +27,8 @@ task("build")
             ,   shortname = 'b'
             ,   options =
                 {
-                    {'b', "build",      "k",  nil   , "Build target. This is default building mode and optional."     }
+                    {nil, "version",    "k",  nil   , "Print the version number and exit."                            }
+                ,   {'b', "build",      "k",  nil   , "Build target. This is default building mode and optional."     }
                 ,   {'r', "rebuild",    "k",  nil   , "Rebuild the target."                                           }
                 ,   {'a', "all",        "k",  nil   , "Build all targets."                                            }
                 ,   {nil, "shallow",    "k",  nil   , "Only re-build the given targets without dependencies."         }
@@ -42,12 +43,12 @@ task("build")
                 ,   {'j', "jobs",       "kv", tostring(os.default_njob()),
                                                       "Set the number of parallel compilation jobs."                  }
                 ,   {nil, "linkjobs",   "kv", nil,    "Set the number of parallel link jobs."                         }
-                ,   {'w', "warning",    "k",  false , "Enable the warnings output."                                   }
+                ,   {'w', "warning",    "k",  false , "Enable the warnings output. (deprecated)"                      }
                 ,   {nil, "files",      "kv", nil   , "Build the given source files.",
                                                       "e.g. ",
                                                       "    - xmake --files=src/main.c",
                                                       "    - xmake --files='src/*.c' [target]",
-                                                      "    - xmake --files='src/**c|excluded_file.c'",
+                                                      "    - xmake --files='src/**.c|excluded_file.c'",
                                                       "    - xmake --files='src/main.c" .. path.envsep() .. "src/test.c'"  }
 
                 ,   {}

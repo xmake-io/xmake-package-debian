@@ -472,40 +472,26 @@ end
 
 -- read all lines from file
 function io.lines(filepath, opt)
-
-    -- close on finished
     opt = opt or {}
     if opt.close_on_finished == nil then
         opt.close_on_finished = true
     end
-
-    -- open file
     local file = io.open(filepath, "r", opt)
     if not file then
         return function() return nil end
     end
-
     return file:lines(opt)
 end
 
 -- read all data from file
 function io.readfile(filepath, opt)
-
     opt = opt or {}
-
-    -- open file
     local file, errors = io.open(tostring(filepath), "r", opt)
     if not file then
         return nil, errors
     end
-
-    -- read all
     local data, err = file:read("*all", opt)
-
-    -- exit file
     file:close()
-
-    -- ok?
     return data, err
 end
 
@@ -535,23 +521,13 @@ end
 
 -- write data to file
 function io.writefile(filepath, data, opt)
-
-    -- init option
     opt = opt or {}
-
-    -- open file
     local file, errors = io.open(tostring(filepath), "w", opt)
     if not file then
         return false, errors
     end
-
-    -- write all
     file:write(data)
-
-    -- exit file
     file:close()
-
-    -- ok?
     return true
 end
 
@@ -587,9 +563,6 @@ end
 --
 function io.open(filepath, mode, opt)
 
-    -- check
-    assert(filepath)
-
     -- init option and mode
     opt  = opt or {}
     mode = mode or "r"
@@ -606,11 +579,6 @@ end
 
 -- open a filelock
 function io.openlock(filepath)
-
-    -- check
-    assert(filepath)
-
-    -- open it
     filepath = tostring(filepath)
     local lock = io.filelock_open(filepath)
     if lock then
@@ -627,17 +595,31 @@ end
 
 -- save object the the given filepath
 function io.save(filepath, object, opt)
-    assert(filepath and object)
-
     opt = opt or {}
+    assert(filepath and object)
     filepath = tostring(filepath)
-    local file, err = io.open(filepath, "wb", opt)
-    if err then
-        return false, err
+
+    -- we save it when file is only changed, we can ensure file modify time.
+    local oldstr
+    if opt.only_changed and os.isfile(filepath) then
+        oldstr = io.readfile(filepath, {encoding = "binary"})
     end
 
-    local ok, errors = file:save(object, opt)
-    file:close()
+    local ok, errors, str
+    str, errors = string.serialize(object, opt)
+    if str then
+        local write = true
+        if opt.only_changed then
+            if oldstr == str then
+                write = false
+            end
+        end
+        if write then
+            ok, errors = io.writefile(filepath, str, {encoding = "binary"})
+        else
+            ok = true
+        end
+    end
     if not ok then
         return false, string.format("save %s failed, %s!", filepath, errors)
     end
@@ -732,42 +714,24 @@ end
 
 -- cat the given file
 function io.cat(filepath, linecount, opt)
-
-    -- init option
     opt = opt or {}
-
-    -- open file
     local file = io.open(filepath, "r", opt)
     if file then
-
-        -- show file
         local count = 1
         for line in file:lines(opt) do
-
-            -- show line
             io.write(line, "\n")
-
-            -- end?
             if linecount and count >= linecount then
                 break
             end
-
-            -- update the line count
             count = count + 1
         end
-
-        -- exit file
         file:close()
     end
 end
 
 -- tail the given file
 function io.tail(filepath, linecount, opt)
-
-    -- init option
     opt = opt or {}
-
-    -- all?
     if linecount < 0 then
         return io.cat(filepath, opt)
     end
@@ -775,43 +739,28 @@ function io.tail(filepath, linecount, opt)
     -- open file
     local file = io.open(filepath, "r", opt)
     if file then
-
-        -- read lines
         local lines = {}
         for line in file:lines(opt) do
             table.insert(lines, line)
         end
 
-        -- tail lines
         local tails = {}
         if #lines ~= 0 then
             local count = 1
             for index = #lines, 1, -1 do
-
-                -- show line
                 table.insert(tails, lines[index])
-
-                -- end?
                 if linecount and count >= linecount then
                     break
                 end
-
-                -- update the line count
                 count = count + 1
             end
         end
 
-        -- show tails
         if #tails ~= 0 then
             for index = #tails, 1, -1 do
-
-                -- show tail
                 io.print(tails[index])
-
             end
         end
-
-        -- exit file
         file:close()
     end
 end

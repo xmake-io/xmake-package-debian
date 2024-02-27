@@ -32,7 +32,9 @@ local table           = require("base/table")
 local baseoption      = require("base/option")
 local hashset         = require("base/hashset")
 local deprecated      = require("base/deprecated")
+local select_script   = require("base/private/select_script")
 local instance_deps   = require("base/private/instance_deps")
+local is_cross        = require("base/private/is_cross")
 local memcache        = require("cache/memcache")
 local rule            = require("project/rule")
 local option          = require("project/option")
@@ -272,27 +274,75 @@ function _instance:_visibility(opt)
     return visibility
 end
 
+-- update file rules
+--
+-- if we add files in on_load() dynamically, we need to update file rules,
+-- otherwise it will cause: unknown source file: ...
+--
+function _instance:_update_filerules()
+    local rulenames = {}
+    local extensions = {}
+    for _, sourcefile in ipairs(table.wrap(self:get("files"))) do
+        local extension = path.extension((sourcefile:gsub("|.*$", "")))
+        if not extensions[extension] then
+            local lang = language.load_ex(extension)
+            if lang and lang:rules() then
+                table.join2(rulenames, lang:rules())
+            end
+            extensions[extension] = true
+        end
+    end
+    rulenames = table.unique(rulenames)
+    for _, rulename in ipairs(rulenames) do
+        local r = target._project() and target._project().rule(rulename) or rule.rule(rulename)
+        if r then
+            -- only add target rules
+            if r:kind() == "target" then
+                if not self:rule(rulename) then
+                    self:rule_add(r)
+                    for _, deprule in ipairs(r:orderdeps()) do
+                        if not self:rule(deprule:name()) then
+                            self:rule_add(deprule)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 -- invalidate the previous cache
 function _instance:_invalidate(name)
     self._CACHEID = self._CACHEID + 1
     self._POLICIES = nil
+    self:_memcache():clear()
     -- we need to flush the source files cache if target/files are modified, e.g. `target:add("files", "xxx.c")`
     if name == "files" then
         self._SOURCEFILES = nil
         self._FILESCONFIG = nil
+        self._OBJECTFILES = nil
+        self._SOURCEBATCHES = nil
+        self:_update_filerules()
     elseif name == "deps" then
         self._DEPS = nil
         self._ORDERDEPS = nil
+        self._INHERITDEPS = nil
     end
 end
 
 -- build deps
 function _instance:_build_deps()
     if target._project() then
-        local instances = target._project().targets()
-        self._DEPS      = self._DEPS or {}
-        self._ORDERDEPS = self._ORDERDEPS or {}
+        local instances   = target._project().targets()
+        self._DEPS        = self._DEPS or {}
+        self._ORDERDEPS   = self._ORDERDEPS or {}
+        self._INHERITDEPS = self._INHERITDEPS or {}
         instance_deps.load_deps(self, instances, self._DEPS, self._ORDERDEPS, {self:name()})
+        -- @see https://github.com/xmake-io/xmake/issues/4689
+        instance_deps.load_deps(self, instances, {}, self._INHERITDEPS, {self:name()}, function (t, dep)
+            local depinherit = t:extraconf("deps", dep:name(), "inherit")
+            return depinherit == nil or depinherit
+        end)
     end
 end
 
@@ -303,26 +353,23 @@ end
 
 -- get values from target deps with {interface|public = ...}
 function _instance:_get_from_deps(name, result_values, result_sources, opt)
-    local orderdeps = self:orderdeps()
+    local orderdeps = self:orderdeps({inherit = true})
     local total = #orderdeps
     for idx, _ in ipairs(orderdeps) do
         local dep = orderdeps[total + 1 - idx]
-        local depinherit = self:extraconf("deps", dep:name(), "inherit")
-        if depinherit == nil or depinherit then
-            local values = dep:get(name, opt)
-            if values ~= nil then
-                table.insert(result_values, values)
-                table.insert(result_sources, "dep::" .. dep:name())
-            end
-            local dep_values = {}
-            local dep_sources = {}
-            dep:_get_from_options(name, dep_values, dep_sources, opt)
-            dep:_get_from_packages(name, dep_values, dep_sources, opt)
-            for idx, values in ipairs(dep_values) do
-                local dep_source = dep_sources[idx]
-                table.insert(result_values, values)
-                table.insert(result_sources, "dep::" .. dep:name() .. "/" .. dep_source)
-            end
+        local values = dep:get(name, opt)
+        if values ~= nil then
+            table.insert(result_values, values)
+            table.insert(result_sources, "dep::" .. dep:name())
+        end
+        local dep_values = {}
+        local dep_sources = {}
+        dep:_get_from_options(name, dep_values, dep_sources, opt)
+        dep:_get_from_packages(name, dep_values, dep_sources, opt)
+        for idx, values in ipairs(dep_values) do
+            local dep_source = dep_sources[idx]
+            table.insert(result_values, values)
+            table.insert(result_sources, "dep::" .. dep:name() .. "/" .. dep_source)
         end
     end
 end
@@ -497,6 +544,23 @@ function _instance:_checked_target()
     return checked_target
 end
 
+-- get format
+function _instance:_format(kind)
+    local formats = self._FORMATS
+    if not formats then
+        for _, toolchain_inst in ipairs(self:toolchains()) do
+            formats = toolchain_inst:get("formats")
+            if formats then
+                break
+            end
+        end
+        self._FORMATS = formats
+    end
+    if formats then
+        return formats[kind or self:kind()]
+    end
+end
+
 -- clone target, @note we can just call it in after_load()
 function _instance:clone()
     if not self:_is_loaded() then
@@ -509,6 +573,9 @@ function _instance:clone()
     if self._ORDERDEPS then
         instance._ORDERDEPS = table.clone(self._ORDERDEPS)
     end
+    if self._INHERITDEPS then
+        instance._INHERITDEPS = table.clone(self._INHERITDEPS)
+    end
     if self._RULES then
         instance._RULES = table.clone(self._RULES)
     end
@@ -520,6 +587,12 @@ function _instance:clone()
     end
     if self._SOURCEFILES then
         instance._SOURCEFILES = table.clone(self._SOURCEFILES)
+    end
+    if self._OBJECTFILES then
+        instance._OBJECTFILES = table.clone(self._OBJECTFILES)
+    end
+    if self._SOURCEBATCHES then
+        instance._SOURCEBATCHES = table.clone(self._SOURCEBATCHES, 3)
     end
     instance._LOADED = self._LOADED
     instance._LOADED_AFTER = true
@@ -733,10 +806,16 @@ end
 --      target:extraconf_from("links", "dep::foo/option::bar")
 --      target:extraconf_from("links", "dep::foo/package::bar")
 --
-function _instance:extraconf_from(source, name, item, key)
+function _instance:extraconf_from(name, source)
+    if name:find("::") then
+        local tmp = name
+        name = source
+        source = tmp
+        utils.warning("please use target:extraconf_from(%s, %s) intead of target:extraconf_from(%s, %s)", name, source, source, name)
+    end
     source = source or "self"
     if source == "self" then
-        return self:extraconf(name, item, key)
+        return self:extraconf(name)
     elseif source:startswith("dep::") then
         local depname = source:split("::", {plain = true, limit = 2})[2]
         local depsource
@@ -751,23 +830,23 @@ function _instance:extraconf_from(source, name, item, key)
             -- dep::foo/option::bar
             -- dep::foo/package::bar
             if depsource then
-                return dep:extraconf_from(dep_source, name, item, key)
+                return dep:extraconf_from(name, dep_source)
             else
                 -- dep::foo
-                return dep:extraconf(name, item, key)
+                return dep:extraconf(name)
             end
         end
     elseif source:startswith("option::") then
         local optname = source:split("::", {plain = true, limit = 2})[2]
         local opt_ = self:opt(optname, opt)
         if opt_ then
-            return opt_:extraconf(name, item, key)
+            return opt_:extraconf(name)
         end
     elseif source:startswith("package::") then
         local pkgname = source:split("::", {plain = true, limit = 2})[2]
         local pkg = self:pkg(pkgname, opt)
         if pkg then
-            return pkg:extraconf(name, item, key)
+            return pkg:extraconf(name)
         end
     else
         os.raise("target:extraconf_from(): unknown source %s", source)
@@ -1074,14 +1153,15 @@ function _instance:deps()
 end
 
 -- get target ordered deps
-function _instance:orderdeps()
+function _instance:orderdeps(opt)
+    opt = opt or {}
     if not self:_is_loaded() then
         os.raise("please call target:orderdeps() in after_load()!")
     end
     if self._DEPS == nil then
         self:_build_deps()
     end
-    return self._ORDERDEPS
+    return opt.inherit and self._INHERITDEPS or self._ORDERDEPS
 end
 
 -- get target rules
@@ -1148,9 +1228,14 @@ function _instance:is_headeronly()
     return self:kind() == "headeronly"
 end
 
+-- is moduleonly target?
+function _instance:is_moduleonly()
+    return self:kind() == "moduleonly"
+end
+
 -- is library target?
 function _instance:is_library()
-    return self:is_static() or self:is_shared() or self:is_headeronly()
+    return self:is_static() or self:is_shared() or self:is_headeronly() or self:is_moduleonly()
 end
 
 -- is default target?
@@ -1167,6 +1252,11 @@ end
 -- is rebuilt?
 function _instance:is_rebuilt()
     return self:data("rebuilt")
+end
+
+-- is cross-compilation?
+function _instance:is_cross()
+    return is_cross(self:plat(), self:arch())
 end
 
 -- get the enabled option
@@ -1502,7 +1592,7 @@ end
 function _instance:filename()
 
     -- no target file?
-    if self:is_object() or self:is_phony() or self:is_headeronly() then
+    if self:is_object() or self:is_phony() or self:is_headeronly() or self:is_moduleonly() then
         return
     end
 
@@ -1514,6 +1604,7 @@ function _instance:filename()
         local suffixname = self:get("suffixname")
         local extension  = self:get("extension")
         filename = target.filename(self:basename(), targetkind, {
+            format = self:_format(),
             plat = self:plat(), arch = self:arch(),
             prefixname = prefixname,
             suffixname = suffixname,
@@ -1559,6 +1650,7 @@ function _instance:symbolfile()
     local suffixname = self:get("suffixname")
     local filename = target.filename(self:basename(), "symbol", {
         plat = self:plat(), arch = self:arch(),
+        format = self:_format("symbol"),
         prefixname = prefixname,
         suffixname = suffixname})
     assert(filename)
@@ -1842,7 +1934,7 @@ function _instance:sourcefiles()
     if removed_count > 0 then
         table.remove_if(sourcefiles, function (i, sourcefile)
             for _, removed_file in ipairs(sourcefiles_removed) do
-                local pattern = path.translate(removed_file:gsub("|.*$", ""))
+                local pattern = path.translate((removed_file:gsub("|.*$", "")))
                 if pattern:sub(1, 2):find('%.[/\\]') then
                     pattern = pattern:sub(3)
                 end
@@ -1863,7 +1955,10 @@ end
 -- get object file from source file
 function _instance:objectfile(sourcefile)
     return self:autogenfile(sourcefile, {rootdir = self:objectdir(),
-        filename = target.filename(path.filename(sourcefile), "object", {plat = self:plat(), arch = self:arch()})})
+        filename = target.filename(path.filename(sourcefile), "object", {
+            plat = self:plat(),
+            arch = self:arch(),
+            format = self:_format("object")})})
 end
 
 -- get the object files
@@ -2026,7 +2121,7 @@ function _instance:headerfiles(outputdir, opt)
     if removed_count > 0 then
         table.remove_if(srcheaders, function (i, srcheader)
             for _, removed_file in ipairs(srcheaders_removed) do
-                local pattern = path.translate(removed_file:gsub("|.*$", ""))
+                local pattern = path.translate((removed_file:gsub("|.*$", "")))
                 if pattern:sub(1, 2):find('%.[/\\]') then
                     pattern = pattern:sub(3)
                 end
@@ -2258,48 +2353,7 @@ function _instance:script(name, generic)
 
     -- get script
     local script = self:get(name)
-    local result = nil
-    if type(script) == "function" then
-        result = script
-    elseif type(script) == "table" then
-
-        -- get plat and arch
-        local plat = self:plat()
-        local arch = self:arch()
-
-        -- match pattern
-        --
-        -- `@linux`
-        -- `@linux|x86_64`
-        -- `@macosx,linux`
-        -- `android@macosx,linux`
-        -- `android|armeabi-v7a@macosx,linux`
-        -- `android|armeabi-v7a@macosx,linux|x86_64`
-        -- `android|armeabi-v7a@linux|x86_64`
-        --
-        for _pattern, _script in pairs(script) do
-            local hosts = {}
-            local hosts_spec = false
-            _pattern = _pattern:gsub("@(.+)", function (v)
-                for _, host in ipairs(v:split(',')) do
-                    hosts[host] = true
-                    hosts_spec = true
-                end
-                return ""
-            end)
-            if not _pattern:startswith("__") and (not hosts_spec or hosts[os.subhost() .. '|' .. os.subarch()] or hosts[os.subhost()])
-            and (_pattern:trim() == "" or (plat .. '|' .. arch):find('^' .. _pattern .. '$') or plat:find('^' .. _pattern .. '$')) then
-                result = _script
-                break
-            end
-        end
-
-        -- get generic script
-        result = result or script["__generic__"] or generic
-    end
-
-    -- only generic script
-    result = result or generic
+    local result = select_script(script, {plat = self:plat(), arch = self:arch()}) or generic
 
     -- imports some modules first
     if result and result ~= generic then
@@ -2363,6 +2417,51 @@ function _instance:pcoutputfile(langkind)
         pcoutputfile = path.join(path.directory(pcoutputfile), sourcekind, path.basename(pcoutputfile) .. (is_gcc and ".gch" or ".pch"))
         self._PCOUTPUTFILES[langkind] = pcoutputfile
         return pcoutputfile
+    end
+end
+
+-- get runtimes
+function _instance:runtimes()
+    local runtimes = self:_memcache():get("runtimes")
+    if runtimes == nil then
+        runtimes = self:get("runtimes")
+        if runtimes then
+            local runtimes_supported = hashset.new()
+            local toolchains = self:toolchains() or platform.load(self:plat(), self:arch()):toolchains()
+            if toolchains then
+                for _, toolchain_inst in ipairs(toolchains) do
+                    if toolchain_inst:is_standalone() and toolchain_inst:get("runtimes") then
+                        for _, runtime in ipairs(table.wrap(toolchain_inst:get("runtimes"))) do
+                            runtimes_supported:insert(runtime)
+                        end
+                    end
+                end
+            end
+            local runtimes_current = {}
+            for _, runtime in ipairs(table.wrap(runtimes)) do
+                if runtimes_supported:has(runtime) then
+                    table.insert(runtimes_current, runtime)
+                end
+            end
+            runtimes = table.unwrap(runtimes_current)
+        end
+        runtimes = runtimes or false
+        self:_memcache():set("runtimes", runtimes)
+    end
+    return runtimes or nil
+end
+
+-- has the given runtime for the current toolchains?
+function _instance:has_runtime(...)
+    local runtimes_set = self:_memcache():get("runtimes_set")
+    if runtimes_set == nil then
+        runtimes_set = hashset.from(table.wrap(self:runtimes()))
+        self:_memcache():set("runtimes_set", runtimes_set)
+    end
+    for _, v in ipairs(table.pack(...)) do
+        if runtimes_set:has(v) then
+            return true
+        end
     end
 end
 
@@ -2833,8 +2932,6 @@ end
 
 -- get the filename from the given target name and kind
 function target.filename(targetname, targetkind, opt)
-
-    -- check
     opt = opt or {}
     assert(targetname and targetkind)
 

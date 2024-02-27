@@ -178,18 +178,49 @@ function _has_ms_runtime_lib(self)
     return has_ms_runtime_lib
 end
 
--- make vs runtime flag
+-- has -static-libstdc++?
+function _has_static_libstdcxx(self)
+    local has_static_libstdcxx = _g._HAS_STATIC_LIBSTDCXX
+    if has_static_libstdcxx == nil then
+        if self:has_flags("-static-libstdc++ -Werror", "ldflags", {flagskey = "clang_static_libstdcxx"}) then
+            has_static_libstdcxx = true
+        end
+        has_static_libstdcxx = has_static_libstdcxx or false
+        _g._HAS_STATIC_LIBSTDCXX = has_static_libstdcxx
+    end
+    return has_static_libstdcxx
+end
+
+-- get llvm sdk root directory
+function _get_llvm_rootdir(self)
+    local llvm_rootdir = _g._LLVM_ROOTDIR
+    if llvm_rootdir == nil then
+        local outdata = try { function() return os.iorun(self:program() .. " -print-resource-dir") end }
+        if outdata then
+            llvm_rootdir = path.normalize(path.join(outdata:trim(), "..", "..", ".."))
+            if not os.isdir(llvm_rootdir) then
+                llvm_rootdir = nil
+            end
+        end
+        _g._LLVM_ROOTDIR = llvm_rootdir or false
+    end
+    return llvm_rootdir or nil
+end
+
+-- make the runtime flag
 -- @see https://github.com/xmake-io/xmake/issues/3546
-function nf_runtime(self, vs_runtime)
-    if self:is_plat("windows") and vs_runtime then
+function nf_runtime(self, runtime, opt)
+    opt = opt or {}
+    local maps
+    -- if a sdk dir is defined, we should redirect include / library path to have the correct includes / libc++ link
+    local kind = self:kind()
+    if self:is_plat("windows") and runtime then
         if not _has_ms_runtime_lib(self) then
-            if vs_runtime:startswith("MD") then
-                wprint("%s runtime is not available for the current Clang compiler.", vs_runtime)
+            if runtime:startswith("MD") then
+                wprint("%s runtime is not available for the current Clang compiler.", runtime)
             end
             return
         end
-        local maps
-        local kind = self:kind()
         if language.sourcekinds()[kind] then
             maps = {
                 MT  = "-fms-runtime-lib=static",
@@ -205,7 +236,46 @@ function nf_runtime(self, vs_runtime)
                 MDd = "-nostdlib"
             }
         end
-        return maps and maps[vs_runtime]
     end
+    if not self:is_plat("android") then -- we will set runtimes in android ndk toolchain
+        maps = maps or {}
+        local llvm_rootdir = self:toolchain():sdkdir()
+        if kind == "cxx" then
+            maps["c++_static"]    = "-stdlib=libc++"
+            maps["c++_shared"]    = "-stdlib=libc++"
+            maps["stdc++_static"] = "-stdlib=libstdc++"
+            maps["stdc++_shared"] = "-stdlib=libstdc++"
+            if not llvm_rootdir and self:is_plat("windows") then
+                -- clang on windows fail to add libc++ includepath when using -stdlib=libc++ so we manually add it
+                -- @see https://github.com/llvm/llvm-project/issues/79647
+                llvm_rootdir = _get_llvm_rootdir(self)
+            end
+            if llvm_rootdir then
+                maps["c++_static"] = table.join(maps["c++_static"], "-cxx-isystem" .. path.join(llvm_rootdir, "include", "c++", "v1"))
+                maps["c++_shared"] = table.join(maps["c++_shared"], "-cxx-isystem" .. path.join(llvm_rootdir, "include", "c++", "v1"))
+            end
+        elseif kind == "ld" or kind == "sh" then
+            local target = opt.target
+            if target and target.sourcekinds and table.contains(table.wrap(target:sourcekinds()), "cxx") then
+                maps["c++_static"]    = "-stdlib=libc++"
+                maps["c++_shared"]    = "-stdlib=libc++"
+                maps["stdc++_static"] = "-stdlib=libstdc++"
+                maps["stdc++_shared"] = "-stdlib=libstdc++"
+                if not llvm_rootdir and self:is_plat("windows") then
+                    -- clang on windows fail to add libc++ librarypath when using -stdlib=libc++ so we manually add it
+                    -- @see https://github.com/llvm/llvm-project/issues/79647
+                    llvm_rootdir = _get_llvm_rootdir(self)
+                end
+                if llvm_rootdir then
+                    maps["c++_static"] = table.join(maps["c++_static"], "-L" .. path.join(llvm_rootdir, "lib"))
+                    maps["c++_shared"] = table.join(maps["c++_shared"], "-L" .. path.join(llvm_rootdir, "lib"))
+                end
+                if runtime:endswith("_static") and _has_static_libstdcxx(self) then
+                    maps["c++_static"] = table.join(maps["c++_static"], "-static-libstdc++")
+                    maps["stdc++_static"] = table.join(maps["stdc++_static"], "-static-libstdc++")
+                end
+            end
+        end
+    end
+    return maps and maps[runtime]
 end
-
