@@ -5,7 +5,7 @@ Maintainer: Lance Lin <lq27267@gmail.com>
 Build-Depends:
  debhelper-compat (= 13),
 Build-Depends-Arch:
- pkg-config,
+ pkgconf,
  lua-cjson,
  libxxhash-dev,
  liblua5.4-dev,
