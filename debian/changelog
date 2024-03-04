@@ -1,6 +1,7 @@
 xmake (2.8.8+ds-1) UNRELEASED; urgency=medium
 
   * New upstream version
+  * Use secure URI in Homepage field.
 
  -- Lance Lin <lq27267@gmail.com>  Mon, 04 Mar 2024 22:40:41 +0700
 

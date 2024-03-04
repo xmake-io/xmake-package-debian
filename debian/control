@@ -15,7 +15,7 @@ Build-Depends-Arch:
  libtbox-dev,
 Rules-Requires-Root: no
 Standards-Version: 4.6.2
-Homepage: http://xmake.io
+Homepage: https://xmake.io
 Vcs-Git: https://salsa.debian.org/xmake-team/xmake.git
 Vcs-Browser: https://salsa.debian.org/xmake-team/xmake
 
