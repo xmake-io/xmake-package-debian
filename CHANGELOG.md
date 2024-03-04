@@ -2,6 +2,19 @@
 
 ## master (unreleased)
 
+## v2.8.8
+
+### Changes
+
+* Add `package:check_sizeof()`
+
+### Bugs Fixed
+
+* [#4774](https://github.com/xmake-io/xmake/issues/4774): Fix android symbol strip
+* [#4769](https://github.com/xmake-io/xmake/issues/4769): Fix cross toolchain and format
+* [#4776](https://github.com/xmake-io/xmake/issues/4776): Fix soname for linux
+* [#4638](https://github.com/xmake-io/xmake/issues/4638): Fix vsxmake with --menu config
+
 ## v2.8.7
 
 ### New features
@@ -1730,6 +1743,19 @@
 # 更新日志
 
 ## master (开发中)
+
+## v2.8.8
+
+### 改进
+
+* 添加 `package:check_sizeof()`
+
+### Bugs 修复
+
+* [#4774](https://github.com/xmake-io/xmake/issues/4774): 修复 Android NDK r26b 上的 strip 支持
+* [#4769](https://github.com/xmake-io/xmake/issues/4769): 修复交叉编译工具链问题
+* [#4776](https://github.com/xmake-io/xmake/issues/4776): 修复 soname
+* [#4638](https://github.com/xmake-io/xmake/issues/4638): 修复 vsxmake generator
 
 ## v2.8.7
 
