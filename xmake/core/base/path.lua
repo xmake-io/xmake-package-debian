@@ -162,6 +162,13 @@ function path.unix(p)
     return (tostring(p):gsub(path.sep(), "/"))
 end
 
+-- get cygwin-style path, e.g. c:\, C:\ -> /c/
+function path.cygwin(p)
+    return (tostring(p):gsub("^(%w):", function (drive)
+        return "/" .. drive:lower()
+    end):gsub("\\", "/"))
+end
+
 -- translate path
 --
 -- @param p     the path
@@ -339,17 +346,14 @@ end
 
 -- concat environment variable with `path.envsep()`,
 -- also handles more speical cases such as posix flags and windows quoted paths
-function path.joinenv(env_table)
-
-    -- check
-    if not env_table or #env_table == 0 then
+function path.joinenv(paths, envsep)
+    if not paths or #paths == 0 then
         return ""
     end
-
-    local envsep = path.envsep()
+    envsep = envsep or path.envsep()
     if xmake._HOST == "windows" then
         local tab = {}
-        for _, v in ipairs(env_table) do
+        for _, v in ipairs(paths) do
             if v ~= "" then
                 if v:find(envsep, 1, true) then
                     v = '"' .. v .. '"'
@@ -359,7 +363,7 @@ function path.joinenv(env_table)
         end
         return table.concat(tab, envsep)
     else
-        return table.concat(env_table, envsep)
+        return table.concat(paths, envsep)
     end
 end
 

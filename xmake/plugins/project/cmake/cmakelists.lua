@@ -196,16 +196,19 @@ function _translate_flag(flag, outputdir)
     if flag then
         if path.instance_of(flag) then
             flag = flag:clone():set(_get_relative_unix_path_to_cmake(flag:rawstr(), outputdir)):str()
-        elseif path.is_absolute(flag) then
-            flag = _get_relative_unix_path_to_cmake(flag, outputdir)
-        elseif flag:startswith("-fmodule-file=") then
-            flag = "-fmodule-file=" .. _get_relative_unix_path_to_cmake(flag:sub(15), outputdir)
-        elseif flag:startswith("-fmodule-mapper=") then
-            flag = "-fmodule-mapper=" .. _get_relative_unix_path_to_cmake(flag:sub(17), outputdir)
-        elseif flag:match("(.+)=(.+)") then
-            local k, v = flag:match("(.+)=(.+)")
-            if v and (v:endswith(".ifc") or v:endswith(".map")) then -- e.g. hello=xxx/hello.ifc
-                flag = k .. "=" .. _get_relative_unix_path_to_cmake(v, outputdir)
+        -- it may be table, https://github.com/xmake-io/xmake/issues/4816
+        elseif type(flag) == "string" then
+            if path.is_absolute(flag) then
+                flag = _get_relative_unix_path_to_cmake(flag, outputdir)
+            elseif flag:startswith("-fmodule-file=") then
+                flag = "-fmodule-file=" .. _get_relative_unix_path_to_cmake(flag:sub(15), outputdir)
+            elseif flag:startswith("-fmodule-mapper=") then
+                flag = "-fmodule-mapper=" .. _get_relative_unix_path_to_cmake(flag:sub(17), outputdir)
+            elseif flag:match("(.+)=(.+)") then
+                local k, v = flag:match("(.+)=(.+)")
+                if v and (v:endswith(".ifc") or v:endswith(".map")) then -- e.g. hello=xxx/hello.ifc
+                    flag = k .. "=" .. _get_relative_unix_path_to_cmake(v, outputdir)
+                end
             end
         end
     end
@@ -1062,20 +1065,19 @@ function _add_target(cmakelists, target, outputdir)
     cmakelists:print("# target")
 
     -- is phony target?
-    local targetkind = target:kind()
     if target:is_phony() then
         return _add_target_phony(cmakelists, target)
-    elseif targetkind == "binary" then
+    elseif target:is_binary() then
         _add_target_binary(cmakelists, target, outputdir)
-    elseif targetkind == "static" then
+    elseif target:is_static() then
         _add_target_static(cmakelists, target, outputdir)
-    elseif targetkind == "shared" then
+    elseif target:is_shared() then
         _add_target_shared(cmakelists, target, outputdir)
-    elseif targetkind == 'headeronly' then
+    elseif target:is_headeronly() then
         _add_target_headeronly(cmakelists, target)
         _add_target_include_directories(cmakelists, target, outputdir)
         return
-    elseif targetkind == 'moduleonly' then
+    elseif target:is_moduleonly() then
         _add_target_moduleonly(cmakelists, target)
         return
     else
@@ -1110,7 +1112,7 @@ function _add_target(cmakelists, target, outputdir)
     -- add target warnings
     _add_target_warnings(cmakelists, target)
 
-    -- add target exceptions 
+    -- add target exceptions
     _add_target_exceptions(cmakelists, target)
 
     -- add target languages
