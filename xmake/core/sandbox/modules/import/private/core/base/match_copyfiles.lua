@@ -15,12 +15,9 @@
 -- Copyright (C) 2015-present, TBOOX Open Source Group.
 --
 -- @author      ruki
--- @file        ifelse.lua
+-- @file        match_copyfiles.lua
 --
 
-return function (...)
-    local utils      = require("base/utils")
-    local deprecated = require("base/deprecated")
-    deprecated.add("(a and b or c)", "ifelse(a, b, c)")
-    return utils.ifelse(...)
-end
+return require("base/private/match_copyfiles")
+
+

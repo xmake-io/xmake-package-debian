@@ -204,7 +204,7 @@ function make_module_buildjobs(target, batchjobs, job_name, deps, opt)
         name = job_name,
         deps = table.join(target:name() .. "_populate_module_map", deps),
         sourcefile = opt.cppfile,
-        job = batchjobs:newjob(name or opt.cppfile, function(index, total)
+        job = batchjobs:newjob(name or opt.cppfile, function(index, total, jobopt)
             local mapped_bmi
             if provide and compiler_support.memcache():get2(target:name() .. name, "reuse") then
                 if not target:is_binary() then
@@ -248,21 +248,22 @@ function make_module_buildjobs(target, batchjobs, job_name, deps, opt)
                     local fileconfig = target:fileconfig(opt.cppfile)
                     local public = fileconfig and fileconfig.public
                     local external = fileconfig and fileconfig.external
+                    local private_dep = fileconfig and fileconfig.private_dep
                     local bmifile = mapped_bmi or bmifile
                     if target:is_binary() then
                         if mapped_bmi then
-                            progress.show((index * 100) / total, "${color.build.target}<%s> ${clear}${color.build.object}compiling.objectfile.$(mode) %s", target:name(), name or opt.cppfile)
+                            progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.objectfile.$(mode) %s", target:name(), name or opt.cppfile)
                             _compile_objectfile_step(target, bmifile, opt.cppfile, opt.objectfile)
                         else
-                            progress.show((index * 100) / total, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
+                            progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
                             _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat")})
                         end
                     else
-                        if not public and not external then
-                            progress.show((index * 100) / total, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
+                        if (not public and not external) or (external and private_dep) then
+                            progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
                             _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat")})
                         else
-                            progress.show((index * 100) / total, "${color.build.target}<%s> ${clear}${color.build.object}compiling.bmi.$(mode) %s", target:name(), name or opt.cppfile)
+                            progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.bmi.$(mode) %s", target:name(), name or opt.cppfile)
                             _compile_bmi_step(target, bmifile, opt.cppfile, {std = (name == "std" or name == "std.compat")})
                         end
                     end
@@ -289,55 +290,39 @@ function make_module_buildcmds(target, batchcmds, opt)
         end
     end
 
-    local build
-    if provide or compiler_support.has_module_extension(opt.cppfile) then
-        build = should_build(target, opt.cppfile, bmifile, {name = name, objectfile = opt.objectfile, requires = opt.module.requires})
-
-        -- needed to detect rebuild of dependencies
-        if provide and build then
-            mark_build(target, name)
-        end
-    end
-
     -- append requires flags
     if opt.module.requires then
         _append_requires_flags(target, opt.module, name, opt.cppfile, bmifile, opt)
     end
 
-    -- for cpp file we need to check after appendings the flags
-    if build == nil then
-        build = should_build(target, opt.cppfile, bmifile, {name = name, objectfile = opt.objectfile, requires = opt.module.requires})
-    end
+    -- compile if it's a named module
+    if provide or compiler_support.has_module_extension(opt.cppfile) then
+        batchcmds:mkdir(path.directory(opt.objectfile))
 
-    if build then
-        -- compile if it's a named module
-        if provide or compiler_support.has_module_extension(opt.cppfile) then
-            batchcmds:mkdir(path.directory(opt.objectfile))
-
-            local fileconfig = target:fileconfig(opt.cppfile)
-            local public = fileconfig and fileconfig.public
-            local external = fileconfig and fileconfig.external
-            local bmifile = mapped_bmi or bmifile
-            if target:is_binary() then
-                if mapped_bmi then
-                    batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.objectfile.$(mode) %s", target:name(), name or opt.cppfile)
-                    _compile_objectfile_step(target, bmifile, opt.cppfile, opt.objectfile, {batchcmds = batchcmds})
-                else
-                    batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
-                    _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
-                end
+        local fileconfig = target:fileconfig(opt.cppfile)
+        local public = fileconfig and fileconfig.public
+        local external = fileconfig and fileconfig.external
+        local private_dep = fileconfig and fileconfig.private_dep
+        local bmifile = mapped_bmi or bmifile
+        if target:is_binary() then
+            if mapped_bmi then
+                batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.objectfile.$(mode) %s", target:name(), name or opt.cppfile)
+                _compile_objectfile_step(target, bmifile, opt.cppfile, opt.objectfile, {batchcmds = batchcmds})
             else
-                if not public and not external then
-                    batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
-                    _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
-                else
-                    batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.bmi.$(mode) %s", target:name(), name or opt.cppfile)
-                    _compile_bmi_step(target, bmifile, opt.cppfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
-                end
+                batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
+                _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
             end
         else
-            batchcmds:rm(opt.objectfile) -- force rebuild for .cpp files
+            if (not public and not external) or (external and private_dep) then
+                batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.module.$(mode) %s", target:name(), name or opt.cppfile)
+                _compile_one_step(target, bmifile, opt.cppfile, opt.objectfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
+            else
+                batchcmds:show_progress(opt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.bmi.$(mode) %s", target:name(), name or opt.cppfile)
+                _compile_bmi_step(target, bmifile, opt.cppfile, {std = (name == "std" or name == "std.compat"), batchcmds = batchcmds})
+            end
         end
+    else
+        batchcmds:rm(opt.objectfile) -- force rebuild for .cpp files
     end
     batchcmds:add_depfiles(opt.cppfile)
     return os.mtime(opt.objectfile)
@@ -350,7 +335,7 @@ function make_headerunit_buildjobs(target, job_name, batchjobs, headerunit, bmif
         return {
             name = job_name,
             sourcefile = headerunit.path,
-            job = batchjobs:newjob(job_name, function(index, total)
+            job = batchjobs:newjob(job_name, function(index, total, jobopt)
                 if not os.isdir(outputdir) then
                     os.mkdir(outputdir)
                 end
@@ -364,7 +349,7 @@ function make_headerunit_buildjobs(target, job_name, batchjobs, headerunit, bmif
                 local depvalues = {compinst:program(), compflags}
 
                 if opt.build then
-                    progress.show((index * 100) / total, "${color.build.target}<%s> ${clear}${color.build.object}compiling.headerunit.$(mode) %s", target:name(), headerunit.name)
+                    progress.show(jobopt.progress, "${color.build.target}<%s> ${clear}${color.build.object}compiling.headerunit.$(mode) %s", target:name(), headerunit.name)
                     _compile(target, _make_headerunitflags(target, headerunit, bmifile), headerunit.path, bmifile)
                 end
 

@@ -67,7 +67,14 @@ function _get_cpplibrary_name(target)
         return "c++"
     elseif target:has_runtime("stdc++_shared", "stdc++_static") then
         return "stdc++"
-    elseif target:is_plat("windows") and target:has_runtime("MD", "MT", "MDd", "MTd") then
+    elseif target:has_runtime("MD", "MT", "MDd", "MTd") then
+        return "msstl"
+    end
+    if target:is_plat("macosx") then
+        return "c++"
+    elseif target:is_plat("linux") then
+        return "stdc++"
+    elseif target:is_plat("windows") then
         return "msstl"
     end
 end
@@ -218,7 +225,7 @@ function get_clang_scan_deps(target)
             local dir = path.directory(program)
             local basename = path.basename(program)
             local extension = path.extension(program)
-            program = (basename:gsub("clang", "clang-scan-deps")) .. extension
+            program = (basename:rtrim("+"):gsub("clang", "clang-scan-deps")) .. extension
             if dir and dir ~= "." and os.isdir(dir) then
                 program = path.join(dir, program)
             end
@@ -240,7 +247,7 @@ function get_stdmodules(target)
             if cpplib == "c++" then
                 -- libc++ module is found by parsing libc++.modules.json
                 -- which can be found in <llvm_path>/lib subdirectory (i.e on debian it should be <llvm_path>/lib/x86_64-unknown-linux-gnu/)
-                -- in the futur llvm may provide a way to directory get the path of libc++.modules.json 
+                -- in the futur llvm may provide a way to directory get the path of libc++.modules.json
                 -- @see https://github.com/llvm/llvm-project/pull/76451 (has been revert, so we need to wait)
                 local clang_path = path.directory(get_clang_path(target))
                 local clang_lib_path = path.join(clang_path, "..", "lib")
