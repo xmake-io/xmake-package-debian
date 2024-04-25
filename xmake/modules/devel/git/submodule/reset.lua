@@ -36,11 +36,7 @@ import("lib.detect.find_tool")
 -- @endcode
 --
 function main(opt)
-
-    -- init options
     opt = opt or {}
-
-    -- find git
     local git = assert(find_tool("git"), "git not found!")
 
     -- init argv
@@ -51,6 +47,12 @@ function main(opt)
     else
         table.insert(argv, "-c")
         table.insert(argv, "core.fsmonitor=false")
+    end
+
+    -- use longpaths, we need it on windows
+    if opt.longpaths then
+        table.insert(argv, "-c")
+        table.insert(argv, "core.longpaths=true")
     end
     table.join2(argv, "submodule", "foreach", "--recursive", "git", "reset")
 

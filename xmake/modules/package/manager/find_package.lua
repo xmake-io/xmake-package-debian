@@ -23,6 +23,19 @@ import("core.base.semver")
 import("core.base.option")
 import("core.project.config")
 import("lib.detect.find_tool")
+import("private.core.base.is_cross")
+
+-- Is the current version matched?
+function _is_match_version(current_version, require_version)
+    if current_version then
+        if current_version == require_version then
+            return true
+        end
+        if semver.is_valid(current_version) and semver.satisfies(current_version, require_version) then
+            return true
+        end
+    end
+end
 
 -- find package with the builtin rule
 --
@@ -41,37 +54,23 @@ function _find_package_with_builtin_rule(package_name, opt)
 
     -- find system package if be not disabled
     if opt.system ~= false then
-
-        -- find it from homebrew
-        if not is_host("windows") then
-            table.insert(managers, "brew")
-        end
-
-        -- find it from vcpkg (support multi-platforms/architectures)
-        table.insert(managers, "vcpkg")
-
-        -- find it from conan (support multi-platforms/architectures)
-        table.insert(managers, "conan")
-
-        -- only support the current sub-host platform and sub-architecture, e.g. linux, macosx, or msys (subsystem)
         local plat = opt.plat
         local arch = opt.arch
-        if plat == os.subhost() and arch == os.subarch() then
-
-            -- find it from pkg-config
+        local find_from_host = not is_cross(plat, arch)
+        if find_from_host and not is_host("windows") then
+            table.insert(managers, "brew")
+        end
+        -- vcpkg/conan support multi-platforms/architectures
+        table.insert(managers, "vcpkg")
+        table.insert(managers, "conan")
+        if find_from_host then
             table.insert(managers, "pkgconfig")
-
-            -- find it from pacman
             if is_subhost("linux", "msys") and plat ~= "windows" and find_tool("pacman") then
                 table.insert(managers, "pacman")
             end
-
-            -- find it from portage
             if is_subhost("linux", "msys") and plat ~= "windows" and find_tool("emerge") then
                 table.insert(managers, "portage")
             end
-
-            -- find it from system
             table.insert(managers, "system")
         end
     end
@@ -196,7 +195,7 @@ function main(name, opt)
 
     -- match version?
     if opt.require_version and opt.require_version:find('.', 1, true) and result then
-        if not (result.version and (result.version == opt.require_version or semver.satisfies(result.version, opt.require_version))) then
+        if not _is_match_version(result.version, opt.require_version) then
             result = nil
         end
     end

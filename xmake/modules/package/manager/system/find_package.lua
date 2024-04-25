@@ -20,6 +20,7 @@
 
 -- imports
 import("core.language.language")
+import("private.core.base.is_cross")
 import("lib.detect.check_cxsnippets")
 
 -- get package items
@@ -36,6 +37,17 @@ function _get_package_items()
     return items
 end
 
+-- check package toolchains
+function _check_package_toolchains(package)
+    local has_standalone
+    for _, toolchain_inst in ipairs(package:toolchains()) do
+        if toolchain_inst:check() and toolchain_inst:is_standalone() then
+            has_standalone = true
+        end
+    end
+    return has_standalone
+end
+
 -- find package from system and compiler
 -- @see https://github.com/xmake-io/xmake/issues/4596
 --
@@ -46,14 +58,27 @@ end
 --
 function main(name, opt)
     opt = opt or {}
-    local configs = opt.configs or {}
+    if is_cross(opt.plat, opt.arch) then
+        return
+    end
 
+    local configs = opt.configs or {}
     local items = _get_package_items()
     local snippet_configs = {}
     for _, name in ipairs(items) do
         snippet_configs[name] = configs[name]
     end
     snippet_configs.links = snippet_configs.links or name
+
+    -- We need to check package toolchain first
+    -- https://github.com/xmake-io/xmake/issues/4596#issuecomment-2014528801
+    --
+    -- But if it depends on some toolchain packages,
+    -- then they can't be detected early in the fetch and we have to disable system.find_package
+    local package = opt.package
+    if package and package:toolchains() and not _check_package_toolchains(package) then
+        return
+    end
 
     local snippet_opt = {
         verbose = opt.verbose,

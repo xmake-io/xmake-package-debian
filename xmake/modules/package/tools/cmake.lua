@@ -87,7 +87,7 @@ end
 
 -- get msvc
 function _get_msvc(package)
-    local msvc = package:toolchain("msvc") or toolchain.load("msvc", {plat = package:plat(), arch = package:arch()})
+    local msvc = package:toolchain("msvc")
     assert(msvc:check(), "vs not found!") -- we need to check vs envs if it has been not checked yet
     return msvc
 end
@@ -169,7 +169,7 @@ function _get_cflags(package, opt)
     end
     table.join2(result, _get_cflags_from_packagedeps(package, opt))
     if #result > 0 then
-        return os.args(result)
+        return os.args(_translate_paths(result))
     end
 end
 
@@ -183,6 +183,12 @@ function _get_cxxflags(package, opt)
         table.join2(result, _map_compflags(package, "cxx", "define", package:build_getenv("defines")))
         table.join2(result, _map_compflags(package, "cxx", "includedir", package:build_getenv("includedirs")))
         table.join2(result, _map_compflags(package, "cxx", "sysincludedir", package:build_getenv("sysincludedirs")))
+    end
+    local runtimes = package:runtimes()
+    if runtimes then
+        local fake_target = {is_shared = function(_) return false end,
+                             sourcekinds = function(_) return "cxx" end}
+        table.join2(result, _map_compflags(fake_target, "cxx", "runtime", runtimes))
     end
     table.join2(result, package:config("cxxflags"))
     table.join2(result, package:config("cxflags"))
@@ -200,7 +206,7 @@ function _get_cxxflags(package, opt)
     end
     table.join2(result, _get_cflags_from_packagedeps(package, opt))
     if #result > 0 then
-        return os.args(result)
+        return os.args(_translate_paths(result))
     end
 end
 
@@ -219,7 +225,7 @@ function _get_asflags(package, opt)
         table.join2(result, opt.asflags)
     end
     if #result > 0 then
-        return os.args(result)
+        return os.args(_translate_paths(result))
     end
 end
 
@@ -233,6 +239,12 @@ function _get_ldflags(package, opt)
         table.join2(result, _map_linkflags(package, "binary", {"cxx"}, "syslink", package:build_getenv("syslinks")))
         table.join2(result, _map_linkflags(package, "binary", {"cxx"}, "linkdir", package:build_getenv("linkdirs")))
     end
+    local runtimes = package:runtimes()
+    if runtimes then
+        local fake_target = {is_shared = function(_) return false end,
+                             sourcekinds = function(_) return "cxx" end}
+        table.join2(result, _map_linkflags(fake_target, "binary", {"cxx"}, "runtime", runtimes))
+    end
     table.join2(result, package:config("ldflags"))
     if package:config("lto") then
         table.join2(result, package:_generate_lto_configs().ldflags)
@@ -245,7 +257,7 @@ function _get_ldflags(package, opt)
         table.join2(result, opt.ldflags)
     end
     if #result > 0 then
-        return os.args(result)
+        return os.args(_translate_paths(result))
     end
 end
 
@@ -259,6 +271,12 @@ function _get_shflags(package, opt)
         table.join2(result, _map_linkflags(package, "shared", {"cxx"}, "syslink", package:build_getenv("syslinks")))
         table.join2(result, _map_linkflags(package, "shared", {"cxx"}, "linkdir", package:build_getenv("linkdirs")))
     end
+    local runtimes = package:runtimes()
+    if runtimes then
+        local fake_target = {is_shared = function(_) return true end,
+                             sourcekinds = function(_) return "cxx" end}
+        table.join2(result, _map_linkflags(fake_target, "shared", {"cxx"}, "runtime", runtimes))
+    end
     table.join2(result, package:config("shflags"))
     if package:config("lto") then
         table.join2(result, package:_generate_lto_configs().shflags)
@@ -271,7 +289,7 @@ function _get_shflags(package, opt)
         table.join2(result, opt.shflags)
     end
     if #result > 0 then
-        return os.args(result)
+        return os.args(_translate_paths(result))
     end
 end
 
@@ -371,6 +389,15 @@ function _get_configs_for_windows(package, configs, opt)
             table.insert(configs, "-DCMAKE_GENERATOR_TOOLSET=" .. vs_toolset)
         end
     end
+
+    -- use clang-cl
+    if package:has_tool("cc", "clang_cl") then
+        table.insert(configs, "-DCMAKE_C_COMPILER=" .. _translate_bin_path(package:build_getenv("cc")))
+    end
+    if package:has_tool("cxx", "clang_cl") then
+        table.insert(configs, "-DCMAKE_CXX_COMPILER=" .. _translate_bin_path(package:build_getenv("cxx")))
+    end
+
     -- we maybe need patch `cmake_policy(SET CMP0091 NEW)` to enable this argument for some packages
     -- @see https://cmake.org/cmake/help/latest/policy/CMP0091.html#policy:CMP0091
     -- https://github.com/xmake-io/xmake-repo/pull/303
@@ -410,15 +437,17 @@ function _get_configs_for_android(package, configs, opt)
     local ndk = get_config("ndk")
     if ndk and os.isdir(ndk) then
         local ndk_sdkver = get_config("ndk_sdkver")
-        local ndk_cxxstl = get_config("ndk_cxxstl")
         table.insert(configs, "-DCMAKE_TOOLCHAIN_FILE=" .. path.join(ndk, "build/cmake/android.toolchain.cmake"))
+        table.insert(configs, "-DANDROID_USE_LEGACY_TOOLCHAIN_FILE=OFF")
         table.insert(configs, "-DANDROID_ABI=" .. package:arch())
         if ndk_sdkver then
             table.insert(configs, "-DANDROID_PLATFORM=android-" .. ndk_sdkver)
             table.insert(configs, "-DANDROID_NATIVE_API_LEVEL=" .. ndk_sdkver)
         end
-        if ndk_cxxstl then
-            table.insert(configs, "-DANDROID_STL=" .. ndk_cxxstl)
+        -- https://cmake.org/cmake/help/latest/variable/CMAKE_ANDROID_STL_TYPE.html
+        local runtime = package:runtimes()
+        if runtime then
+            table.insert(configs, "-DCMAKE_ANDROID_STL_TYPE=" .. runtime)
         end
         if is_host("windows") and opt.cmake_generator ~= "Ninja" then
             local make = path.join(ndk, "prebuilt", "windows-x86_64", "bin", "make.exe")
@@ -497,7 +526,7 @@ function _get_configs_for_mingw(package, configs, opt)
     -- CMAKE_MAKE_PROGRAM may be required for some CMakeLists.txt (libcurl)
     if is_subhost("windows") and opt.cmake_generator ~= "Ninja" then
         local mingw = assert(package:build_getenv("mingw") or package:build_getenv("sdk"), "mingw not found!")
-        envs.CMAKE_MAKE_PROGRAM = path.join(mingw, "bin", "mingw32-make.exe")
+        envs.CMAKE_MAKE_PROGRAM = _translate_bin_path(path.join(mingw, "bin", "mingw32-make.exe"))
     end
     if opt.cmake_generator == "Ninja" then
         envs.CMAKE_MAKE_PROGRAM = "ninja"
@@ -862,7 +891,6 @@ function _build_for_ninja(package, configs, opt)
     opt = opt or {}
     ninja.build(package, {}, {envs = opt.envs or buildenvs(package, opt),
         jobs = opt.jobs,
-        buildir = opt.buildir,
         target = opt.target})
 end
 
@@ -947,7 +975,6 @@ function _install_for_ninja(package, configs, opt)
     opt = opt or {}
     ninja.install(package, {}, {envs = opt.envs or buildenvs(package, opt),
         jobs = opt.jobs,
-        buildir = opt.buildir,
         target = opt.target})
 end
 
@@ -964,22 +991,39 @@ function _install_for_cmakebuild(package, configs, opt)
     os.vrunv(cmake.program, {"--install", os.curdir()})
 end
 
+-- get cmake generator
+function _get_cmake_generator(package, opt)
+    opt = opt or {}
+    local cmake_generator = opt.cmake_generator
+    if not cmake_generator then
+        if project.policy("package.cmake_generator.ninja") then
+            cmake_generator = "Ninja"
+        end
+        if not cmake_generator then
+            if package:has_tool("cc", "clang_cl") or package:has_tool("cxx", "clang_cl") then
+                cmake_generator = "Ninja"
+            end
+        end
+        local cmake_generator_env = os.getenv("CMAKE_GENERATOR")
+        if not cmake_generator and cmake_generator_env then
+            cmake_generator = cmake_generator_env
+        end
+        if cmake_generator then
+            opt.cmake_generator = cmake_generator
+        end
+    end
+    return cmake_generator
+end
+
 -- build package
 function build(package, configs, opt)
-
-    -- init options
     opt = opt or {}
+    local cmake_generator = _get_cmake_generator(package, opt)
 
     -- enter build directory
     local buildir = opt.buildir or package:buildir()
     os.mkdir(path.join(buildir, "install"))
     local oldir = os.cd(buildir)
-
-    -- exists $CMAKE_GENERATOR? use it
-    local cmake_generator_env = os.getenv("CMAKE_GENERATOR")
-    if not opt.cmake_generator and cmake_generator_env then
-        opt.cmake_generator = cmake_generator_env
-    end
 
     -- pass configurations
     local argv = {}
@@ -1000,7 +1044,6 @@ function build(package, configs, opt)
     os.vrunv(cmake.program, argv, {envs = opt.envs or buildenvs(package, opt)})
 
     -- do build
-    local cmake_generator = opt.cmake_generator
     if opt.cmake_build then
         _build_for_cmakebuild(package, configs, opt)
     elseif cmake_generator then
@@ -1025,12 +1068,8 @@ end
 
 -- install package
 function install(package, configs, opt)
-
-    -- init options
     opt = opt or {}
-    if (not opt.cmake_generator) and project.policy("package.cmake_generator.ninja") then
-        opt.cmake_generator = "Ninja"
-    end
+    local cmake_generator = _get_cmake_generator(package, opt)
 
     -- enter build directory
     local buildir = opt.buildir or package:buildir()
@@ -1056,7 +1095,6 @@ function install(package, configs, opt)
     os.vrunv(cmake.program, argv, {envs = opt.envs or buildenvs(package, opt)})
 
     -- do build and install
-    local cmake_generator = opt.cmake_generator
     if opt.cmake_build then
         _install_for_cmakebuild(package, configs, opt)
     elseif cmake_generator then
