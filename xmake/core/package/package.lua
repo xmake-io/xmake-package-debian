@@ -39,6 +39,7 @@ local is_cross       = require("base/private/is_cross")
 local memcache       = require("cache/memcache")
 local toolchain      = require("tool/toolchain")
 local compiler       = require("tool/compiler")
+local linker         = require("tool/linker")
 local sandbox        = require("sandbox/sandbox")
 local config         = require("project/config")
 local policy         = require("project/policy")
@@ -979,9 +980,12 @@ function _instance:_rawenvs()
     local envs = self._RAWENVS
     if not envs then
         envs = {}
+
+        -- add bin PATH
         if self:is_binary() or self:is_plat("windows", "mingw") then -- bin/*.dll for windows
             envs.PATH = {"bin"}
         end
+
         -- add LD_LIBRARY_PATH to load *.so directory
         if os.host() ~= "windows" and self:is_plat(os.host()) and self:is_arch(os.arch()) then
             envs.LD_LIBRARY_PATH = {"lib"}
@@ -1164,6 +1168,9 @@ function _instance:toolchain(name)
             end
         end
         self:_memcache():set("toolchains_map", toolchains_map)
+    end
+    if not toolchains_map[name] then
+        toolchains_map[name] = toolchain.load(name, {plat = self:plat(), arch = self:arch()})
     end
     return toolchains_map[name]
 end
@@ -1724,10 +1731,13 @@ function _instance:_fetch_library(opt)
     local fetchinfo
     local on_fetch = self:script("fetch")
     if on_fetch then
-        fetchinfo = on_fetch(self, {force = opt.force,
-                                    system = opt.system,
-                                    external = opt.external,
-                                    require_version = opt.require_version})
+        -- we cannot fetch it from system if it's cross-compilation package
+        if not opt.system or (opt.system and not self:is_cross()) then
+            fetchinfo = on_fetch(self, {force = opt.force,
+                                        system = opt.system,
+                                        external = opt.external,
+                                        require_version = opt.require_version})
+        end
         if fetchinfo and opt.require_version and opt.require_version:find(".", 1, true) then
             local version = fetchinfo.version
             if not (version and (version == opt.require_version or semver.satisfies(version, opt.require_version))) then
@@ -1940,8 +1950,8 @@ function _instance:fetch(opt)
             end
         end
 
-        -- fetch it from the system and external package sources (disabled for cross-compilation)
-        if not fetchinfo and system ~= false and not self:is_cross() then
+        -- fetch it from the system and external package sources
+        if not fetchinfo and system ~= false then
             fetchinfo = self:_fetch_library({system = true, require_version = require_ver, external = external, force = opt.force})
             if fetchinfo then
                 is_system = true
@@ -2262,27 +2272,34 @@ end
 function _instance:_generate_build_configs(configs, opt)
     opt = opt or {}
     configs = table.join(self:fetch_librarydeps(), configs)
-    if self:is_plat("windows") then
-        local ld = self:build_getenv("ld")
-        local runtimes = self:runtimes()
-        -- since we are ignoring the runtimes of the headeronly library,
-        -- we can only get the runtimes from the dependency library to detect the link.
-        if self:is_headeronly() and not runtimes and self:librarydeps() then
-            for _, dep in ipairs(self:librarydeps()) do
-                if dep:is_plat("windows") and dep:runtimes() then
-                    runtimes = dep:runtimes()
-                    break
-                end
+    -- since we are ignoring the runtimes of the headeronly library,
+    -- we can only get the runtimes from the dependency library to detect the link.
+    local runtimes = self:runtimes()
+    if self:is_headeronly() and not runtimes and self:librarydeps() then
+        for _, dep in ipairs(self:librarydeps()) do
+            if dep:is_plat("windows") and dep:runtimes() then
+                runtimes = dep:runtimes()
+                break
             end
         end
-        if runtimes and ld and path.basename(ld:lower()) == "link" then -- for msvc?
-            configs.cxflags = table.wrap(configs.cxflags)
-            table.insert(configs.cxflags, "/" .. runtimes)
-            if runtimes:startswith("MT") then
-                configs.ldflags = table.wrap(configs.ldflags)
-                table.insert(configs.ldflags, "-nodefaultlib:msvcrt.lib")
-            end
+    end
+    if runtimes then
+        local sourcekind = opt.sourcekind or "cxx"
+        local tool, name = self:tool("ld")
+        local linker, errors = linker.load("binary", sourcekind, {target = package})
+        if not linker then
+            os.raise(errors)
         end
+        local fake_target = {is_shared = function(_) return false end, 
+                             sourcekinds = function(_) return sourcekind end}
+        local compiler = self:compiler(sourcekind)
+        local cxflags = compiler:map_flags("runtime", runtimes, {target = fake_target})
+        configs.cxflags = table.wrap(configs.cxflags)
+        table.join2(configs.cxflags, cxflags)
+
+        local ldflags = linker:map_flags("runtime", runtimes, {target = fake_target})
+        configs.ldflags = table.wrap(configs.ldflags)
+        table.join2(configs.ldflags, ldflags)
     end
     if self:config("lto") then
         local configs_lto = self:_generate_lto_configs(opt.sourcekind or "cxx")

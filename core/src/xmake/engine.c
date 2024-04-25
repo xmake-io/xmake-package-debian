@@ -122,6 +122,7 @@ tb_int_t xm_os_syserror(lua_State* lua);
 tb_int_t xm_os_strerror(lua_State* lua);
 tb_int_t xm_os_getwinsize(lua_State* lua);
 tb_int_t xm_os_getpid(lua_State* lua);
+tb_int_t xm_os_signal(lua_State* lua);
 #ifndef TB_CONFIG_OS_WINDOWS
 tb_int_t xm_os_uid(lua_State* lua);
 tb_int_t xm_os_gid(lua_State* lua);
@@ -293,6 +294,9 @@ tb_int_t xm_libc_setbyte(lua_State* lua);
 // the tty functions
 tb_int_t xm_tty_term_mode(lua_State* lua);
 
+// the package functions
+tb_int_t xm_package_loadxmi(lua_State* lua);
+
 #ifdef XM_CONFIG_API_HAVE_CURSES
 // register curses functions
 tb_int_t xm_lua_curses_register(lua_State* lua, tb_char_t const* module);
@@ -344,6 +348,7 @@ static luaL_Reg const g_os_functions[] =
 ,   { "filesize",       xm_os_filesize  }
 ,   { "getwinsize",     xm_os_getwinsize}
 ,   { "getpid",         xm_os_getpid    }
+,   { "signal",         xm_os_signal    }
 #ifndef TB_CONFIG_OS_WINDOWS
 ,   { "uid",            xm_os_uid       }
 ,   { "gid",            xm_os_gid       }
@@ -566,6 +571,13 @@ static luaL_Reg const g_libc_functions[] =
 static luaL_Reg const g_tty_functions[] =
 {
     { "term_mode",      xm_tty_term_mode    }
+,   { tb_null,          tb_null             }
+};
+
+// the package functions
+static luaL_Reg const g_package_functions[] =
+{
+    { "loadxmi",        xm_package_loadxmi  }
 ,   { tb_null,          tb_null             }
 };
 
@@ -931,10 +943,38 @@ static tb_void_t xm_engine_init_host(xm_engine_t* engine)
     lua_setglobal(engine->lua, "_SUBHOST");
 }
 
+static __tb_inline__ tb_char_t const* xm_engine_xmake_arch()
+{
+    tb_char_t const* arch = tb_null;
+#if defined(TB_CONFIG_OS_WINDOWS) && !defined(TB_COMPILER_LIKE_UNIX)
+#   if defined(TB_ARCH_x64)
+    arch = "x64";
+#   elif defined(TB_ARCH_ARM64)
+    arch = "arm64";
+#   elif defined(TB_ARCH_ARM)
+    arch = "arm";
+#   else
+    arch = "x86";
+#   endif
+#elif defined(TB_ARCH_x64)
+    arch = "x86_64";
+#elif defined(TB_ARCH_x86)
+    arch = "i386";
+#else
+    arch = TB_ARCH_STRING;
+#endif
+    return arch;
+}
+
 static tb_void_t xm_engine_init_arch(xm_engine_t* engine)
 {
     // check
     tb_assert_and_check_return(engine && engine->lua);
+
+    // init xmake arch
+    tb_char_t const* xmakearch = xm_engine_xmake_arch();
+    lua_pushstring(engine->lua, xmakearch);
+    lua_setglobal(engine->lua, "_XMAKE_ARCH");
 
     // init system architecture
     tb_char_t const* sysarch = tb_null;
@@ -970,27 +1010,8 @@ static tb_void_t xm_engine_init_arch(xm_engine_t* engine)
     default:
         break;
     }
-
-    // get arch from compiler
-    if (!sysarch)
-    {
-#   if defined(TB_ARCH_x64)
-        sysarch = "x64";
-#   elif defined(TB_ARCH_ARM64)
-        sysarch = "arm64";
-#   elif defined(TB_ARCH_ARM)
-        sysarch = "arm";
-#   else
-        sysarch = "x86";
-#   endif
-    }
-#elif defined(TB_ARCH_x64)
-    sysarch = "x86_64";
-#elif defined(TB_ARCH_x86)
-    sysarch = "i386";
-#else
-    sysarch = TB_ARCH_STRING;
 #endif
+    if (!sysarch) sysarch = xmakearch;
     lua_pushstring(engine->lua, sysarch);
     lua_setglobal(engine->lua, "_ARCH");
 
@@ -1146,6 +1167,9 @@ xm_engine_ref_t xm_engine_init(tb_char_t const* name, xm_engine_lni_initalizer_c
 
         // bind tty functions
         xm_lua_register(engine->lua, "tty", g_tty_functions);
+
+        // bind package functions
+        xm_lua_register(engine->lua, "package", g_package_functions);
 
 #ifdef XM_CONFIG_API_HAVE_CURSES
         // bind curses

@@ -182,7 +182,7 @@ $ xmake f --menu
 
 * Windows (x86, x64, arm64)
 * macOS (i386, x86_64, arm64)
-* Linux (i386, x86_64, cross-toolchains ..)
+* Linux (i386, x86_64, arm, arm64, riscv, mips, 390x, sh4 ...)
 * *BSD (i386, x86_64)
 * Android (x86, x86_64, armeabi, armeabi-v7a, arm64-v8a)
 * iOS (armv7, armv7s, arm64, i386, x86_64)
@@ -193,6 +193,8 @@ $ xmake f --menu
 * MinGW (i386, x86_64, arm, arm64)
 * Cygwin (i386, x86_64)
 * Wasm (wasm32, wasm64)
+* Haiku (i386, x86_64)
+* Harmony (x86_64, armeabi-v7a, arm64-v8a)
 * Cross (cross-toolchains ..)
 
 ## Supported toolchains
@@ -242,6 +244,7 @@ masm32        The MASM32 SDK
 iverilog      Icarus Verilog
 verilator     Verilator open-source SystemVerilog simulator and lint system
 cosmocc       build-once run-anywhere
+hdk           Harmony SDK
 ```
 
 ## Supported languages

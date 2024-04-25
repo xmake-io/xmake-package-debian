@@ -19,4 +19,4 @@
 --
 
 -- return module
-return require("base/dlist")
+return require("base/list")
