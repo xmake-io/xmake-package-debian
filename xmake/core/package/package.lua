@@ -1202,7 +1202,8 @@ end
 -- get the program and name of the given tool kind
 function _instance:tool(toolkind)
     if self:toolchains() then
-        return toolchain.tool(self:toolchains(), toolkind, {cachekey = "package", plat = self:plat(), arch = self:arch()})
+        local cachekey = "package_" .. tostring(self)
+        return toolchain.tool(self:toolchains(), toolkind, {cachekey = cachekey, plat = self:plat(), arch = self:arch()})
     else
         return platform.tool(toolkind, self:plat(), self:arch())
     end
@@ -1211,7 +1212,8 @@ end
 -- get tool configuration from the toolchains
 function _instance:toolconfig(name)
     if self:toolchains() then
-        return toolchain.toolconfig(self:toolchains(), name, {cachekey = "package", plat = self:plat(), arch = self:arch()})
+        local cachekey = "package_" .. tostring(self)
+        return toolchain.toolconfig(self:toolchains(), name, {cachekey = cachekey, plat = self:plat(), arch = self:arch()})
     else
         return platform.toolconfig(name, self:plat(), self:arch())
     end
@@ -2271,7 +2273,7 @@ end
 -- generate building configs for has_xxx/check_xxx
 function _instance:_generate_build_configs(configs, opt)
     opt = opt or {}
-    configs = table.join(self:fetch_librarydeps(), configs)
+    configs = table.join(self:fetch_librarydeps() or {}, configs)
     -- since we are ignoring the runtimes of the headeronly library,
     -- we can only get the runtimes from the dependency library to detect the link.
     local runtimes = self:runtimes()
@@ -2661,6 +2663,7 @@ function package.apis()
             -- package.on_xxx
             "package.on_load"
         ,   "package.on_fetch"
+        ,   "package.on_check"
         ,   "package.on_download"
         ,   "package.on_install"
         ,   "package.on_test"
@@ -2904,6 +2907,12 @@ function package.load_from_repository(packagename, packagedir, opt)
     package._memcache():set2("packages", instance)
     return instance
 end
+
+-- new a package instance
+function package.new(...)
+    return _instance.new(...)
+end
+
 
 -- return module
 return package

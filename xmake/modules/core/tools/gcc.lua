@@ -182,6 +182,10 @@ function nf_vectorext(self, extension)
     ,   neon       = "-mfpu=neon"
     ,   all        = "-march=native"
     }
+    if extension == "all" and self:is_cross() then
+        -- https://github.com/xmake-io/xmake-repo/pull/4040#discussion_r1605121207
+        maps[extension] = nil
+    end
     return maps[extension]
 end
 
@@ -235,8 +239,10 @@ function nf_language(self, stdname)
         ,   gnu11       = "-std=gnu11"
         ,   c17         = "-std=c17"
         ,   gnu17       = "-std=gnu17"
-        ,   clatest     = {"-std=c2x", "-std=c17", "-std=c11", "-std=c99", "-std=c89", "-ansi"}
-        ,   gnulatest   = {"-std=c2x", "-std=gnu17", "-std=gnu11", "-std=gnu99", "-std=gnu89", "-ansi"}
+        ,   c23         = {"-std=c23", "-std=c2x"}
+        ,   gnu23       = {"-std=gnu23", "-std=gnu2x"}
+        ,   clatest     = {"-std=c23", "-std=c2x", "-std=c17", "-std=c11", "-std=c99", "-std=c89", "-ansi"}
+        ,   gnulatest   = {"-std=gnu23", "-std=gnu2x", "-std=gnu17", "-std=gnu11", "-std=gnu99", "-std=gnu89", "-ansi"}
         }
     end
 
@@ -263,8 +269,12 @@ function nf_language(self, stdname)
         ,   gnuxx23      = {"-std=gnu++23", "-std=c++2b"}
         ,   cxx2b        = "-std=c++2b"
         ,   gnuxx2b      = "-std=gnu++2b"
-        ,   cxxlatest    = {"-std=c++23", "-std=c++2b", "-std=c++20", "-std=c++2a", "-std=c++17", "-std=c++14", "-std=c++11", "-std=c++1z", "-std=c++98"}
-        ,   gnuxxlatest  = {"-std=gnu++23", "-std=gnu++2b", "-std=gnu++20", "-std=gnu++2a", "-std=gnu++17", "-std=gnu++14", "-std=gnu++11", "-std=c++1z", "-std=gnu++98"}
+        ,   cxx2c        = "-std=c++2c"
+        ,   gnuxx2c      = "-std=gnu++2c"
+        ,   cxx26        = {"-std=c++26", "-std=c++2c"}
+        ,   gnuxx26      = {"-std=gnu++26", "-std=gnu++2c"}
+        ,   cxxlatest    = {"-std=c++26", "-std=c++2c", "-std=c++23", "-std=c++2b", "-std=c++20", "-std=c++2a", "-std=c++17", "-std=c++14", "-std=c++11", "-std=c++1z", "-std=c++98"}
+        ,   gnuxxlatest  = {"-std=gnu++26", "-std=gnu++2c", "-std=gnu++23", "-std=gnu++2", "-std=gnu++20", "-std=gnu++2a", "-std=gnu++17", "-std=gnu++14", "-std=gnu++11", "-std=c++1z", "-std=gnu++98"}
         }
         local cxxmaps2 = {}
         for k, v in pairs(_g.cxxmaps) do
@@ -375,13 +385,24 @@ function nf_linkdir(self, dir)
 end
 
 -- make the rpathdir flag
-function nf_rpathdir(self, dir)
+function nf_rpathdir(self, dir, opt)
+    opt = opt or {}
     dir = path.translate(dir)
     if self:has_flags("-Wl,-rpath=" .. dir, "ldflags") then
         local flags = {"-Wl,-rpath=" .. (dir:gsub("@[%w_]+", function (name)
             local maps = {["@loader_path"] = "$ORIGIN", ["@executable_path"] = "$ORIGIN"}
             return maps[name]
         end))}
+        -- add_rpathdirs("...", {runpath = false})
+        -- https://github.com/xmake-io/xmake/issues/5109
+        local extra = opt.extra
+        if extra then
+            if extra.runpath == false and self:has_flags("-Wl,-rpath=" .. dir .. ",--disable-new-dtags", "ldflags") then
+                flags[1] = flags[1] .. ",--disable-new-dtags"
+            elseif extra.runpath == true and self:has_flags("-Wl,-rpath=" .. dir .. ",--enable-new-dtags", "ldflags") then
+                flags[1] = flags[1] .. ",--enable-new-dtags"
+            end
+        end
         if self:is_plat("bsd") then
             -- FreeBSD ld must have "-zorigin" with "-rpath".  Otherwise, $ORIGIN is not translated and it is literal.
             table.insert(flags, 1, "-Wl,-zorigin")
