@@ -118,13 +118,29 @@ function _load_vcvarsall(vcvarsall, vsver, arch, opt)
     if vsver and tonumber(vsver) >= 16 then
         file:print("set VSCMD_SKIP_SENDTELEMETRY=yes")
     end
+    local host_arch = os.arch()
     if is_vsdevcmd then
-        if opt.vcvars_ver then
-            file:print("call \"%s\" -arch=%s -winsdk=%s -vcvars_ver=%s > nul", vcvarsall, arch, opt.sdkver and opt.sdkver or "", opt.vcvars_ver)
+        if vsver and tonumber(vsver) >= 16 then
+            if opt.vcvars_ver then
+                file:print("call \"%s\" -host_arch=%s -arch=%s -winsdk=%s -vcvars_ver=%s > nul", vcvarsall, host_arch, arch, opt.sdkver and opt.sdkver or "", opt.vcvars_ver)
+            else
+                file:print("call \"%s\" -host_arch=%s -arch=%s -winsdk=%s > nul", vcvarsall, host_arch, arch, opt.sdkver and opt.sdkver or "")
+            end
         else
-            file:print("call \"%s\" -arch=%s -winsdk=%s > nul", vcvarsall, arch, opt.sdkver and opt.sdkver or "")
+            if opt.vcvars_ver then
+                file:print("call \"%s\" -arch=%s -winsdk=%s -vcvars_ver=%s > nul", vcvarsall, arch, opt.sdkver and opt.sdkver or "", opt.vcvars_ver)
+            else
+                file:print("call \"%s\" -arch=%s -winsdk=%s > nul", vcvarsall, arch, opt.sdkver and opt.sdkver or "")
+            end
         end
     else
+        -- @see https://github.com/xmake-io/xmake/issues/5077
+        if vsver and tonumber(vsver) >= 16 and host_arch ~= arch then
+            if host_arch == "x64" then
+                host_arch = "amd64"
+            end
+            arch = host_arch .. "_" .. arch
+        end
         if opt.vcvars_ver then
             file:print("call \"%s\" %s %s -vcvars_ver=%s > nul", vcvarsall, arch, opt.sdkver and opt.sdkver or "", opt.vcvars_ver)
         else
@@ -250,20 +266,9 @@ function _find_vstudio(opt)
         if vcvarsall and os.isfile(vcvarsall) and vsvers[VisualStudioVersion] then
 
             -- load vcvarsall
-            local vcvarsall_x86 = _load_vcvarsall(vcvarsall, VisualStudioVersion, "x86", opt)
-            local vcvarsall_x64 = _load_vcvarsall(vcvarsall, VisualStudioVersion, "x64", opt)
-
-            -- load vcvarsall for arm64
-            local arch
-            local arch_os = os.arch()
-            if arch_os == "x64" then
-                arch = "x64_arm64"
-            elseif arch_os == "x86" then
-                arch = "x86_arm64"
-            elseif arch_os == "arm64" then
-                arch = "arm64"
-            end
-            local vcvarsall_arm64 = arch and _load_vcvarsall(vcvarsall, version, arch, opt) or nil
+            local vcvarsall_x86   = _load_vcvarsall(vcvarsall, VisualStudioVersion, "x86", opt)
+            local vcvarsall_x64   = _load_vcvarsall(vcvarsall, VisualStudioVersion, "x64", opt)
+            local vcvarsall_arm64 = _load_vcvarsall(vcvarsall, VisualStudioVersion, "arm64", opt)
 
             -- save results
             local results = {}
@@ -355,20 +360,9 @@ function _find_vstudio(opt)
         if vcvarsall then
 
             -- load vcvarsall
-            local vcvarsall_x86 = _load_vcvarsall(vcvarsall, version, "x86", opt)
-            local vcvarsall_x64 = _load_vcvarsall(vcvarsall, version, "x64", opt)
-
-            -- load vcvarsall for arm64
-            local arch
-            local arch_os = os.arch()
-            if arch_os == "x64" then
-                arch = "x64_arm64"
-            elseif arch_os == "x86" then
-                arch = "x86_arm64"
-            elseif arch_os == "arm64" then
-                arch = "arm64"
-            end
-            local vcvarsall_arm64 = arch and _load_vcvarsall(vcvarsall, version, arch, opt) or nil
+            local vcvarsall_x86   = _load_vcvarsall(vcvarsall, version, "x86", opt)
+            local vcvarsall_x64   = _load_vcvarsall(vcvarsall, version, "x64", opt)
+            local vcvarsall_arm64 = _load_vcvarsall(vcvarsall, version, "arm64", opt)
 
             -- save results
             results[vsvers[version]] = {version = version, vcvarsall_bat = vcvarsall, vcvarsall = {x86 = vcvarsall_x86, x64 = vcvarsall_x64, arm64 = vcvarsall_arm64}}
@@ -445,6 +439,9 @@ function main(opt)
     local key = "vstudio"
     if opt.vcvars_ver then
         key = key .. opt.vcvars_ver
+    end
+    if opt.sdkver then
+        key = key .. opt.sdkver
     end
 
     -- attempt to get it from the global cache first

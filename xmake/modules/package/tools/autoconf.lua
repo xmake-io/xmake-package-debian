@@ -226,11 +226,13 @@ function buildenvs(package, opt)
         cxxflags = table.join(table.wrap(package:config("cxflags")), package:config("cxxflags"))
         asflags  = table.copy(table.wrap(package:config("asflags")))
         ldflags  = table.copy(table.wrap(package:config("ldflags")))
+        shflags  = table.copy(table.wrap(package:config("shflags")))
         if package:is_plat("linux") and package:is_arch("i386") then
             table.insert(cflags,   "-m32")
             table.insert(cxxflags, "-m32")
             table.insert(asflags,  "-m32")
             table.insert(ldflags,  "-m32")
+            table.insert(shflags,  "-m32")
         end
         table.join2(cflags,   opt.cflags)
         table.join2(cflags,   opt.cxflags)
@@ -239,10 +241,12 @@ function buildenvs(package, opt)
         table.join2(cppflags, opt.cppflags) -- @see https://github.com/xmake-io/xmake/issues/1688
         table.join2(asflags,  opt.asflags)
         table.join2(ldflags,  opt.ldflags)
+        table.join2(shflags,  opt.shflags)
         table.join2(cflags,   _get_cflags_from_packagedeps(package, opt))
         table.join2(cxxflags, _get_cflags_from_packagedeps(package, opt))
         table.join2(cppflags, _get_cflags_from_packagedeps(package, opt))
         table.join2(ldflags,  _get_ldflags_from_packagedeps(package, opt))
+        table.join2(shflags,  _get_ldflags_from_packagedeps(package, opt))
     else
         cross = true
         cppflags = {}
@@ -306,11 +310,11 @@ function buildenvs(package, opt)
     end
     local runtimes = package:runtimes()
     if runtimes then
-        local fake_target = {is_shared = function(_) return false end, 
+        local fake_target = {is_shared = function(_) return false end,
                              sourcekinds = function(_) return "cxx" end}
         table.join2(cxxflags, _map_compflags(fake_target, "cxx", "runtime", runtimes))
         table.join2(ldflags, _map_linkflags(fake_target, "binary", {"cxx"}, "runtime", runtimes))
-        fake_target = {is_shared = function(_) return true end, 
+        fake_target = {is_shared = function(_) return true end,
                        sourcekinds = function(_) return "cxx" end}
         table.join2(shflags, _map_linkflags(fake_target, "shared", {"cxx"}, "runtime", runtimes))
     end
@@ -318,6 +322,7 @@ function buildenvs(package, opt)
         table.join2(cflags, package:_generate_sanitizer_configs("address", "cc").cflags)
         table.join2(cxxflags, package:_generate_sanitizer_configs("address", "cxx").cxxflags)
         table.join2(ldflags, package:_generate_sanitizer_configs("address").ldflags)
+        table.join2(shflags, package:_generate_sanitizer_configs("address").shflags)
     end
     if cflags then
         envs.CFLAGS    = table.concat(_translate_paths(cflags), ' ')
@@ -334,11 +339,9 @@ function buildenvs(package, opt)
     if arflags then
         envs.ARFLAGS   = table.concat(_translate_paths(arflags), ' ')
     end
-    if ldflags then
-        envs.LDFLAGS   = table.concat(_translate_paths(ldflags), ' ')
-    end
-    if shflags then
-        envs.SHFLAGS   = table.concat(_translate_paths(shflags), ' ')
+    if ldflags or shflags then
+        -- autoconf does not use SHFLAGS
+        envs.LDFLAGS   = table.concat(_translate_paths(table.join(ldflags or {}, shflags)), ' ')
     end
 
     -- cross-compilation? pass the full build environments

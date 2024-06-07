@@ -51,11 +51,7 @@ end
 -- @endcode
 --
 function main(opt)
-
-    -- init options
     opt       = opt or {}
     opt.check = opt.check or _check
-
-    -- find program
     return find_program(opt.program or "ar", opt)
 end

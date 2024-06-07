@@ -18,17 +18,8 @@
 -- @file        xmake.lua
 --
 
--- define toolchain
 toolchain("cross")
-
-    -- set description
     set_description("Common cross compilation toolchain")
-
-    -- mark as cross-compilation toolchain
     set_kind("cross")
-
-    -- check toolchain
     on_check("check")
-
-    -- load toolchain
     on_load("load")

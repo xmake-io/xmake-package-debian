@@ -65,6 +65,9 @@ task("require")
                 ,   {nil, "info",       "k",  nil,       "Show the given package info.",
                                                          "e.g.",
                                                          "    $ xmake require --info tbox"                                     }
+                ,   {nil, "check",      "k",  nil,      "Check whether the given package is supported",
+                                                         "e.g.",
+                                                         "    $ xmake require --check tbox"                                    }
                 ,   {nil, "fetch",      "k",  nil,      "Fetch the library info of given package.",
                                                          "e.g.",
                                                          "    $ xmake require --fetch tbox"                                    }
@@ -76,6 +79,7 @@ task("require")
                                                          "e.g.",
                                                          "    $ xmake require --search tbox"                                   }
                 ,   {nil, "upgrade",    "k",  nil,       "Upgrade the installed packages."                                     }
+                ,   {nil, "download",   "k",  nil,       "Only download the given package source archive files."               }
                 ,   {nil, "uninstall",  "k",  nil,       "Uninstall the installed packages.",
                                                          "e.g.",
                                                          "    $ xmake require --uninstall",
@@ -93,7 +97,7 @@ task("require")
                                                          "    $ xmake require --import tbox zlib",
                                                          "    $ xmake require --import --packagedir=packagesdir zlib",
                                                          "    $ xmake require --import --extra=\"{debug=true}\" tbox"          }
-                ,   {nil, "packagedir", "kv", "packages","Set the packages directory for exporting and importing."             }
+                ,   {nil, "packagedir", "kv", "packages","Set the packages directory for exporting, importing and downloading."}
                 ,   {nil, "debugdir",   "kv", nil,       "Set the source directory of the current package for debugging."      }
                 ,   {nil, "extra",      "kv", nil,       "Set the extra info of packages."                                     }
                 ,   {                                                                                                          }

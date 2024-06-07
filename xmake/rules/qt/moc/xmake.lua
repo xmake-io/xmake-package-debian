@@ -23,8 +23,6 @@ rule("qt.moc")
     add_deps("qt.ui", {order = true})
     set_extensions(".h", ".hpp")
     before_buildcmd_file(function (target, batchcmds, sourcefile, opt)
-
-        -- imports
         import("core.tool.compiler")
 
         -- get moc
@@ -71,7 +69,6 @@ rule("qt.moc")
         -- generate c++ source file for moc
         local flags = {}
         table.join2(flags, compiler.map_flags("cxx", "define", _get_values_from_target(target, "defines")))
-        table.join2(flags, compiler.map_flags("cxx", "runtime", _get_values_from_target(target, "runtimes")))
         local pathmaps = {
             {"includedirs", "includedir"},
             {"sysincludedirs", "includedir"}, -- for now, moc process doesn't support MSVC external includes flags and will fail
@@ -110,13 +107,15 @@ rule("qt.moc")
                     break
                 end
             end
+            batchcmds:set_depmtime(os.mtime(sourcefile_moc))
+            batchcmds:set_depcache(target:dependfile(sourcefile_moc))
         else
             -- compile c++ source file for moc
             batchcmds:compile(sourcefile_moc, objectfile)
+            batchcmds:set_depmtime(os.mtime(objectfile))
+            batchcmds:set_depcache(target:dependfile(objectfile))
         end
 
         -- add deps
         batchcmds:add_depfiles(sourcefile)
-        batchcmds:set_depmtime(os.mtime(objectfile))
-        batchcmds:set_depcache(target:dependfile(objectfile))
     end)
