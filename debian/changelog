@@ -1,6 +1,7 @@
 xmake (2.9.2+ds-1) UNRELEASED; urgency=medium
 
   * New upstream version
+  * d/patches: Refresh convert_local_source_to_external_dependencies.patch.
 
  -- Lance Lin <lq27267@gmail.com>  Fri, 07 Jun 2024 20:27:26 +0700
 
