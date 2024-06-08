@@ -36,9 +36,18 @@ Date: 21 Aug 2023
  /* //////////////////////////////////////////////////////////////////////////////////////
 --- a/core/xmake.sh
 +++ b/core/xmake.sh
-@@ -216,16 +216,5 @@
+@@ -215,17 +215,14 @@
+     option_end
  }
  
++# Define symbol for lua-cjson if linker flag found
++lua_ldflags=`pkg-config --libs lua 2>/dev/null | tr -d " "`
++lua_cjson_ldflags="${lua_ldflags}-cjson"
++case "${LDFLAGS}" in
++    *"${lua_cjson_ldflags}"*)
++        add_defines "XM_CONFIG_API_HAVE_LUA_CJSON" "{public}"
++esac
++
  # add projects
 -if ! has_config "external"; then
 -    if is_config "runtime" "luajit"; then
@@ -55,19 +64,25 @@ Date: 21 Aug 2023
  includes "src/demo"
 --- a/core/xmake.lua
 +++ b/core/xmake.lua
-@@ -99,15 +99,6 @@
+@@ -98,16 +98,13 @@
+     add_cxflags("/utf-8")
  end
  
- -- add projects
+--- add projects
 -includes("src/sv", "src/lz4", "src/tbox", "src/xmake", "src/demo")
--if has_config("lua_cjson") then
+ if has_config("lua_cjson") then
 -    includes("src/lua-cjson")
 -end
 -if is_config("runtime", "luajit") then
 -    includes("src/luajit")
 -else
 -    includes("src/lua")
--end
++    add_deps("lua-cjson")
++    add_defines("NDEBUG", "USE_INTERNAL_FPCONV")
++    add_defines("XM_CONFIG_API_HAVE_LUA_CJSON", {public = true})
+ end
++
++-- add projects
  if is_plat("windows") then
      includes("src/pdcurses")
  end

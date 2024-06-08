@@ -6,7 +6,7 @@ Build-Depends:
  debhelper-compat (= 13),
 Build-Depends-Arch:
  pkgconf,
- lua-cjson,
+ lua-cjson-dev,
  libxxhash-dev,
  liblua5.4-dev,
  libluajit-5.1-dev,
