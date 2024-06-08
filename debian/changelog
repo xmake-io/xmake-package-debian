@@ -1,4 +1,4 @@
-xmake (2.9.2+ds-2) UNRELEASED; urgency=medium
+xmake (2.9.2+ds-2) unstable; urgency=medium
 
   * Fix build to use lua-cjson (Closes: #1072039).
     - d/control: Replace lua-cjson with lua-cjson-dev in build depends.
@@ -6,7 +6,7 @@ xmake (2.9.2+ds-2) UNRELEASED; urgency=medium
     - d/patches: Update patch to define symbol for lua-cjson if linker
       flag is passed.
 
- -- Lance Lin <lq27267@gmail.com>  Sat, 08 Jun 2024 16:37:43 +0700
+ -- Lance Lin <lq27267@gmail.com>  Sat, 08 Jun 2024 17:17:06 +0700
 
 xmake (2.9.2+ds-1) unstable; urgency=medium
 
